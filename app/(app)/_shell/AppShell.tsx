@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { useProfile } from '@/lib/profile-context'
 import { DOMAIN_META, type Domain } from '@/lib/types'
 
@@ -16,6 +17,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, activeDomain, setActiveDomain, memoryCount, loading } =
     useProfile()
   const pathname = usePathname()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const color = profile?.user_color || '#C8A96E'
   const assistantName = profile?.assistant_name || 'Nova'
@@ -28,16 +30,66 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     ['--user-color-glow' as string]: `color-mix(in srgb, ${color} 10%, transparent)`,
   } as React.CSSProperties
 
+  // close drawer when the route changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSidebarOpen(false)
+  }, [pathname])
+
+  // lock page scroll behind the drawer
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [sidebarOpen])
+
   if (loading) {
     return <div className="app-loading">◎</div>
   }
 
   return (
-    <div className="app-shell" style={themeStyle}>
-      <aside className="app-sidebar">
-        <div className="app-brand">
-          <span className="app-brand-mark">◎</span>
-          <span className="app-brand-name">{assistantName.toLowerCase()}</span>
+    <div
+      className={`app-shell${sidebarOpen ? ' sidebar-open' : ''}`}
+      style={themeStyle}
+    >
+      <button
+        type="button"
+        className="app-hamburger"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open menu"
+        aria-expanded={sidebarOpen}
+      >
+        ☰
+      </button>
+
+      {sidebarOpen && (
+        <div
+          className="app-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`app-sidebar${sidebarOpen ? ' is-open' : ''}`}
+        aria-hidden={!sidebarOpen && undefined}
+      >
+        <div className="app-sidebar-head">
+          <div className="app-brand">
+            <span className="app-brand-mark">◎</span>
+            <span className="app-brand-name">{assistantName.toLowerCase()}</span>
+          </div>
+          <button
+            type="button"
+            className="app-sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="app-section">
@@ -51,7 +103,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   key={d}
                   type="button"
                   className={`app-domain-btn${active ? ' is-active' : ''}`}
-                  onClick={() => setActiveDomain(d)}
+                  onClick={() => {
+                    setActiveDomain(d)
+                    setSidebarOpen(false)
+                  }}
                 >
                   <span className="app-domain-emoji">{meta.emoji}</span>
                   <span>{meta.label}</span>
