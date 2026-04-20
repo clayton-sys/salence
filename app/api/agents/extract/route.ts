@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         domain: body.domain,
         tags: Array.isArray(f.tags) ? f.tags : [],
         source: 'agent',
-        vector: [],
+        // vector intentionally omitted in v1 — pgvector column rejects empty arrays.
         weight: 0.5,
         status: 'active',
         contradicts: [],

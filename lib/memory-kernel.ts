@@ -1,6 +1,14 @@
 import { supabase } from './supabase'
 import { MemoryRecord, ContentType, Domain } from './types'
 
+// `vector` is intentionally omitted in v1 — the column is pgvector-typed and
+// rejects empty arrays ("vector must have at least 1 dimension"). It will be
+// populated in v2 when similarity search ships.
+export type NewRecord = Omit<
+  MemoryRecord,
+  'id' | 'created_at' | 'last_accessed' | 'vector'
+>
+
 export function makeRecord(params: {
   content: string
   contentType?: ContentType
@@ -8,7 +16,7 @@ export function makeRecord(params: {
   tags?: string[]
   source?: string
   userId: string
-}): Omit<MemoryRecord, 'id' | 'created_at' | 'last_accessed'> {
+}): NewRecord {
   return {
     user_id: params.userId,
     content: params.content,
@@ -16,7 +24,6 @@ export function makeRecord(params: {
     domain: params.domain || 'personal',
     tags: params.tags || [],
     source: params.source || 'chat',
-    vector: [], // populated when pgvector search enabled in v2
     weight: 0.5,
     status: 'active',
     contradicts: [],
@@ -27,8 +34,22 @@ export function makeRecord(params: {
 }
 
 export async function saveRecord(
-  record: Omit<MemoryRecord, 'id' | 'created_at' | 'last_accessed'>
+  record: NewRecord
 ): Promise<MemoryRecord | null> {
+  console.log('Save record attempt:', {
+    user_id: record.user_id,
+    domain: record.domain,
+    content_type: record.content_type,
+    content_preview: record.content.slice(0, 60),
+  })
+
+  if (!record.user_id) {
+    console.error('Save record aborted: user_id is missing or falsy', {
+      user_id: record.user_id,
+    })
+    return null
+  }
+
   try {
     const { data, error } = await supabase
       .from('records')
@@ -36,12 +57,20 @@ export async function saveRecord(
       .select()
       .single()
     if (error) {
-      console.error('Save record error:', error)
+      console.error('Save record error:', JSON.stringify(error))
+      console.error('Save record error (expanded):', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        user_id: record.user_id,
+      })
       return null
     }
     return data as MemoryRecord
   } catch (err) {
-    console.error('Save record exception:', err)
+    console.error('Save record exception:', JSON.stringify(err))
+    console.error('Save record exception (raw):', err)
     return null
   }
 }

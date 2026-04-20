@@ -25,7 +25,11 @@ create table if not exists public.records (
   domain text not null default 'personal',
   tags text[] not null default array[]::text[],
   source text not null default 'chat',
-  vector double precision[] not null default array[]::double precision[],
+  -- vector column deferred to v2 (pgvector similarity search).
+  -- NOT included here: Supabase auto-enables pgvector on some projects, and
+  -- a pgvector-typed column with an empty-array default raises
+  -- "vector must have at least 1 dimension" on insert. Add it in v2 like:
+  --   alter table public.records add column vector vector(1536);
   weight real not null default 0.5,
   status text not null default 'active',
   contradicts text[] not null default array[]::text[],

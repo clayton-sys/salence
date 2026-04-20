@@ -20,7 +20,7 @@ export default function SettingsPage() {
   const [provider, setProvider] = useState('claude')
   const [apiKey, setApiKey] = useState('')
   const [activeDomains, setActiveDomains] = useState<Domain[]>([])
-  const [savedNotice, setSavedNotice] = useState('')
+  const [savedSection, setSavedSection] = useState<'assistant' | 'provider' | null>(null)
   const [testResult, setTestResult] = useState<string | null>(null)
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function SettingsPage() {
       domains: activeDomains,
     })
     await refreshProfile()
-    flashSaved()
+    flashSaved('assistant')
   }
 
   async function saveProvider() {
@@ -52,7 +52,7 @@ export default function SettingsPage() {
       localStorage.setItem('salence_api_key', apiKey.trim())
     }
     await refreshProfile()
-    flashSaved()
+    flashSaved('provider')
   }
 
   async function testConnection() {
@@ -121,9 +121,9 @@ export default function SettingsPage() {
     window.location.reload()
   }
 
-  function flashSaved() {
-    setSavedNotice('Saved')
-    setTimeout(() => setSavedNotice(''), 1600)
+  function flashSaved(section: 'assistant' | 'provider') {
+    setSavedSection(section)
+    setTimeout(() => setSavedSection(null), 1600)
   }
 
   function toggleDomain(d: Domain) {
@@ -136,7 +136,6 @@ export default function SettingsPage() {
     <section className="settings-view">
       <header className="settings-header">
         <h1>Settings</h1>
-        {savedNotice && <span className="settings-flash">{savedNotice}</span>}
       </header>
 
       <section className="settings-section">
@@ -195,6 +194,9 @@ export default function SettingsPage() {
         <button className="settings-primary" onClick={saveAssistant}>
           Save assistant
         </button>
+        {savedSection === 'assistant' && (
+          <p className="settings-flash-inline">✓ Saved</p>
+        )}
       </section>
 
       <section className="settings-section">
@@ -236,6 +238,9 @@ export default function SettingsPage() {
             Test connection
           </button>
         </div>
+        {savedSection === 'provider' && (
+          <p className="settings-flash-inline">✓ Saved — API key stored locally</p>
+        )}
         {testResult && <p className="settings-test">{testResult}</p>}
       </section>
 

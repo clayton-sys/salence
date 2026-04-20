@@ -55,6 +55,44 @@ export default function ChatPage() {
     })
   }, [messages, thinking])
 
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('records')
+        .select('content, tags, created_at')
+        .eq('user_id', userId)
+        .eq('content_type', 'conversation')
+        .eq('source', 'chat')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (error) {
+        console.error('Load chat history error:', JSON.stringify(error))
+        return
+      }
+      if (cancelled || !data) return
+      const loaded: Message[] = data
+        .map((row) => {
+          const role: 'user' | 'assistant' =
+            Array.isArray(row.tags) && row.tags.includes('assistant')
+              ? 'assistant'
+              : 'user'
+          return {
+            role,
+            content: row.content,
+            ts: new Date(row.created_at).getTime(),
+          }
+        })
+        .reverse()
+      setMessages(loaded)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
   const toggleVoice = useCallback(() => {
     const w = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionLike
