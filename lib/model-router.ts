@@ -42,19 +42,41 @@ export const TASK_TIER = {
 
 export type TaskType = keyof typeof TASK_TIER
 
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image'
+      source: { type: 'base64'; media_type: string; data: string }
+    }
+  | {
+      type: 'document'
+      source: {
+        type: 'base64'
+        media_type: 'application/pdf'
+        data: string
+      }
+    }
+
 export async function modelCall({
   taskType,
   systemPrompt,
   userMessage,
+  content,
   apiKey,
 }: {
   taskType: TaskType
   systemPrompt: string
-  userMessage: string
+  userMessage?: string
+  content?: ContentBlock[]
   apiKey: string
 }): Promise<string> {
   const tier = TASK_TIER[taskType]
   const config = MODEL_CONFIG[tier]
+
+  const messageContent: ContentBlock[] =
+    content && content.length > 0
+      ? content
+      : [{ type: 'text', text: userMessage ?? '' }]
 
   if (config.provider === 'anthropic') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -69,7 +91,7 @@ export async function modelCall({
         model: config.model,
         max_tokens: config.maxTokens,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{ role: 'user', content: messageContent }],
       }),
     })
     const data = await res.json()
@@ -79,12 +101,24 @@ export async function modelCall({
 
   if (config.provider === 'ollama') {
     const baseUrl = config.baseUrl || 'http://localhost:11434'
+    // Ollama doesn't support image/document blocks in /api/generate — flatten to text.
+    const textOnly =
+      userMessage ??
+      messageContent
+        .map((b) =>
+          b.type === 'text'
+            ? b.text
+            : b.type === 'image'
+              ? '[image attachment]'
+              : '[pdf attachment]'
+        )
+        .join('\n\n')
     const res = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: config.model,
-        prompt: `${systemPrompt}\n\nUser: ${userMessage}`,
+        prompt: `${systemPrompt}\n\nUser: ${textOnly}`,
         stream: false,
       }),
     })

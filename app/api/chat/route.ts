@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getServerSupabase } from '@/lib/supabase-server'
-import { modelCall } from '@/lib/model-router'
+import { modelCall, type ContentBlock } from '@/lib/model-router'
 import type { Domain, MemoryRecord } from '@/lib/types'
 
 export const runtime = 'nodejs'
+
+interface Attachment {
+  kind: 'image' | 'document'
+  media_type: string
+  data: string // base64
+  filename: string
+}
 
 interface ChatBody {
   message: string
@@ -11,6 +18,7 @@ interface ChatBody {
   assistantName: string
   userName: string
   history: { role: 'user' | 'assistant'; content: string }[]
+  attachment?: Attachment | null
 }
 
 export async function POST(req: Request) {
@@ -89,16 +97,43 @@ Keep responses conversational — this is a chat, not a report.`
     .map((m) => `${m.role === 'user' ? body.userName : body.assistantName}: ${m.content}`)
     .join('\n')
 
-  const userMessage = transcriptBlock
-    ? `Prior exchange:\n${transcriptBlock}\n\nRespond to the latest message from ${body.userName}.`
+  const textPayload = transcriptBlock
+    ? `Prior exchange:\n${transcriptBlock}\n\nLatest message from ${body.userName}: ${body.message}`
     : body.message
+
+  // Build content blocks. Claude wants documents/images BEFORE the question text,
+  // so the model reads the attachment first and then the instruction.
+  const blocks: ContentBlock[] = []
+  const att = body.attachment
+  if (att) {
+    if (att.kind === 'image') {
+      blocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: att.media_type,
+          data: att.data,
+        },
+      })
+    } else if (att.kind === 'document') {
+      blocks.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: att.data,
+        },
+      })
+    }
+  }
+  blocks.push({ type: 'text', text: textPayload })
 
   try {
     const reply = await modelCall({
       taskType: 'chat',
       apiKey,
       systemPrompt,
-      userMessage,
+      content: blocks,
     })
     return NextResponse.json({ reply })
   } catch (err) {

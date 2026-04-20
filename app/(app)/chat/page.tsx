@@ -26,6 +26,24 @@ interface SpeechRecognitionLike {
   onend: () => void
 }
 
+const ACCEPTED_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]
+const MAX_FILE_BYTES = 10 * 1024 * 1024 // 10MB
+
+interface PendingAttachment {
+  file: File
+  kind: 'image' | 'document'
+  mediaType: string
+  filename: string
+  base64: string
+  preview: string | null // data URL for images; null for PDFs
+}
+
 export default function ChatPage() {
   const { profile, userId, activeDomain, refreshMemoryCount } = useProfile()
   const [messages, setMessages] = useState<Message[]>([])
@@ -33,8 +51,11 @@ export default function ChatPage() {
   const [thinking, setThinking] = useState(false)
   const [listening, setListening] = useState(false)
   const [voiceSupported, setVoiceSupported] = useState(false)
+  const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const assistantName = profile?.assistant_name || 'Nova'
   const userName = profile?.name || 'friend'
@@ -140,17 +161,66 @@ export default function ChatPage() {
     setListening(true)
   }, [listening])
 
+  async function onFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    setAttachError(null)
+    const file = e.target.files?.[0]
+    // reset so selecting the same file twice still fires change
+    e.target.value = ''
+    if (!file) return
+
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setAttachError(
+        `Unsupported file type. Accepted: JPEG, PNG, WebP, GIF, PDF.`
+      )
+      return
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      const mb = (file.size / 1024 / 1024).toFixed(1)
+      setAttachError(`File is ${mb}MB — max is 10MB.`)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onerror = () => setAttachError('Could not read the file.')
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.split(',')[1] ?? ''
+      const kind: 'image' | 'document' =
+        file.type === 'application/pdf' ? 'document' : 'image'
+      setAttachment({
+        file,
+        kind,
+        mediaType: file.type,
+        filename: file.name,
+        base64,
+        preview: kind === 'image' ? dataUrl : null,
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function clearAttachment() {
+    setAttachment(null)
+    setAttachError(null)
+  }
+
   async function sendMessage() {
     const text = input.trim()
     if (!text || !userId || thinking) return
 
     const now = Date.now()
+    const sent = attachment
+    const displayContent = sent
+      ? `${text}\n\n📎 ${sent.filename}`
+      : text
     const next: Message[] = [
       ...messages,
-      { role: 'user', content: text, ts: now },
+      { role: 'user', content: displayContent, ts: now },
     ]
     setMessages(next)
     setInput('')
+    setAttachment(null)
+    setAttachError(null)
     setThinking(true)
 
     await saveRecord(
@@ -158,7 +228,7 @@ export default function ChatPage() {
         content: text,
         contentType: 'conversation',
         domain: activeDomain,
-        tags: ['user'],
+        tags: sent ? ['user', 'with-attachment'] : ['user'],
         source: 'chat',
         userId,
       })
@@ -206,6 +276,14 @@ export default function ChatPage() {
             role: m.role,
             content: m.content,
           })),
+          attachment: sent
+            ? {
+                kind: sent.kind,
+                media_type: sent.mediaType,
+                data: sent.base64,
+                filename: sent.filename,
+              }
+            : null,
         }),
       })
       const data = await res.json()
@@ -227,6 +305,20 @@ export default function ChatPage() {
           userId,
         })
       )
+
+      if (sent) {
+        const summary = reply.replace(/\s+/g, ' ').trim().slice(0, 180)
+        await saveRecord(
+          makeRecord({
+            content: `User uploaded ${sent.filename} — ${summary}`,
+            contentType: 'fact',
+            domain: activeDomain,
+            tags: ['upload', sent.mediaType],
+            source: 'chat',
+            userId,
+          })
+        )
+      }
       refreshMemoryCount()
     } catch (err) {
       setMessages((prev) => [
@@ -282,6 +374,44 @@ export default function ChatPage() {
         )}
       </div>
 
+      {(attachment || attachError) && (
+        <div className="chat-attachment-tray">
+          {attachment && (
+            <div className="chat-attachment-preview">
+              {attachment.preview ? (
+                // Data-URL preview of a user-uploaded file — next/image can't
+                // optimize data URLs, plain <img> is correct here.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={attachment.preview}
+                  alt={attachment.filename}
+                  className="chat-attachment-thumb"
+                />
+              ) : (
+                <div className="chat-attachment-pdf">
+                  <span className="chat-attachment-icon">📄</span>
+                  <span className="chat-attachment-name">
+                    {attachment.filename}
+                  </span>
+                </div>
+              )}
+              <button
+                type="button"
+                className="chat-attachment-remove"
+                onClick={clearAttachment}
+                aria-label="Remove attachment"
+                title="Remove"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {attachError && (
+            <p className="chat-attachment-error">{attachError}</p>
+          )}
+        </div>
+      )}
+
       <form
         className="chat-input-row"
         onSubmit={(e) => {
@@ -289,6 +419,22 @@ export default function ChatPage() {
           sendMessage()
         }}
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_TYPES.join(',')}
+          onChange={onFileSelect}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          className="chat-attach"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach file"
+          title="Attach image or PDF"
+        >
+          📎
+        </button>
         {voiceSupported && (
           <button
             type="button"
