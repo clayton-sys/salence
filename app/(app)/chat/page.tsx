@@ -53,6 +53,7 @@ export default function ChatPage() {
   const [voiceSupported, setVoiceSupported] = useState(false)
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const [attachError, setAttachError] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState('')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -67,6 +68,21 @@ export default function ChatPage() {
     }
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition
     setVoiceSupported(!!Ctor)
+  }, [])
+
+  // Read the API key after mount (post-hydration) so SSR and client render agree,
+  // and re-read when the tab regains focus in case Settings just updated it.
+  useEffect(() => {
+    const read = () => {
+      const raw = localStorage.getItem('salence_api_key') ?? ''
+      // Trim defensively: mobile keyboards / clipboards sometimes wrap pasted
+      // keys in whitespace or quotes, and invisible characters survive save.
+      const cleaned = raw.trim().replace(/^["']|["']$/g, '')
+      setApiKey(cleaned)
+    }
+    read()
+    window.addEventListener('focus', read)
+    return () => window.removeEventListener('focus', read)
   }, [])
 
   useEffect(() => {
@@ -208,6 +224,22 @@ export default function ChatPage() {
     const text = input.trim()
     if (!text || !userId || thinking) return
 
+    // Block the request up-front if there's no key — rather than sending
+    // an empty/invalid request and waiting for a confusing server error.
+    if (!apiKey) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'I need your API key to respond. Open Settings → Your AI, paste your key, and click Save provider.',
+          ts: Date.now(),
+          err: true,
+        },
+      ])
+      return
+    }
+
     const now = Date.now()
     const sent = attachment
     const displayContent = sent
@@ -233,11 +265,6 @@ export default function ChatPage() {
         userId,
       })
     )
-
-    const apiKey =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('salence_api_key') || ''
-        : ''
 
     // fire-and-forget fact extraction
     if (apiKey) {

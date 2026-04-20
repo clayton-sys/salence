@@ -22,13 +22,20 @@ interface ChatBody {
 }
 
 export async function POST(req: Request) {
-  const apiKey = req.headers.get('x-salence-api-key') || ''
+  // Header names are case-insensitive but we send x-salence-api-key.
+  // Trim defensively — some proxies/edge layers pad headers with spaces.
+  const rawKey = req.headers.get('x-salence-api-key') ?? ''
+  const apiKey = rawKey.trim()
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'Missing API key. Set one in Settings.' },
+      { error: 'Missing API key. Open Settings → Your AI to paste your key.' },
       { status: 400 }
     )
   }
+  // Helpful diagnostic: log length + prefix only, never the key itself.
+  console.log(
+    `[/api/chat] key length=${apiKey.length} prefix=${apiKey.slice(0, 7)}…`
+  )
 
   let body: ChatBody
   try {

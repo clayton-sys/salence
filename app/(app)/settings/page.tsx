@@ -49,7 +49,11 @@ export default function SettingsPage() {
   async function saveProvider() {
     await upsertProfile({ provider })
     if (provider !== 'ollama') {
-      localStorage.setItem('salence_api_key', apiKey.trim())
+      // Strip whitespace AND any wrapping quotes — mobile keyboards and
+      // password managers often inject these when pasting.
+      const cleaned = apiKey.trim().replace(/^["']|["']$/g, '')
+      localStorage.setItem('salence_api_key', cleaned)
+      setApiKey(cleaned)
     }
     await refreshProfile()
     flashSaved('provider')
