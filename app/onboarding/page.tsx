@@ -4,15 +4,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { saveRecord, makeRecord } from '@/lib/memory-kernel'
-import { upsertProfile, PRESET_COLORS } from '@/lib/profile'
+import { upsertProfile } from '@/lib/profile'
+import { THEME_SEEDS } from '@/lib/theme'
 import { ALL_DOMAINS, DOMAIN_META, type Domain } from '@/lib/types'
 
 const ASSISTANT_SUGGESTIONS = ['Nova', 'Atlas', 'Sage', 'Echo', 'Iris']
-const PROVIDERS = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'openai', label: 'ChatGPT' },
-  { id: 'ollama', label: 'Local (Ollama)' },
-]
+const TOTAL_STEPS = 5
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -26,12 +23,10 @@ export default function OnboardingPage() {
   const [domains, setDomains] = useState<Domain[]>(['personal'])
   // step 3
   const [assistantName, setAssistantName] = useState('')
-  const [color, setColor] = useState(PRESET_COLORS[0])
+  const [color, setColor] = useState(THEME_SEEDS[0].hex)
   // step 4
   const [importText, setImportText] = useState('')
-  // step 5
-  const [provider, setProvider] = useState('claude')
-  const [apiKey, setApiKey] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,6 +43,15 @@ export default function OnboardingPage() {
     })()
   }, [router])
 
+  // Clean up any legacy localStorage API keys from the pre-server-key era.
+  useEffect(() => {
+    try {
+      localStorage.removeItem('salence_api_key')
+    } catch {
+      /* localStorage blocked */
+    }
+  }, [])
+
   function toggleDomain(d: Domain) {
     setDomains((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
@@ -61,11 +65,12 @@ export default function OnboardingPage() {
     try {
       await upsertProfile({
         name: name || 'friend',
-        provider,
+        provider: 'claude',
         domains,
         user_color: color,
         assistant_name: assistantName || 'Nova',
         settings: {},
+        onboarding_completed_at: new Date().toISOString(),
       })
 
       if (intro.trim().length >= 10) {
@@ -100,10 +105,6 @@ export default function OnboardingPage() {
         }
       }
 
-      if (provider !== 'ollama' && apiKey.trim()) {
-        localStorage.setItem('salence_api_key', apiKey.trim())
-      }
-
       router.replace('/chat')
     } catch (err) {
       setError((err as Error).message)
@@ -114,16 +115,19 @@ export default function OnboardingPage() {
 
   const themeStyle = {
     ['--user-color' as string]: color,
+    ['--accent' as string]: color,
   } as React.CSSProperties
 
   return (
     <main className="onboarding-shell" style={themeStyle}>
       <div className="onboarding-progress">
-        <span>Step {step + 1} of 6</span>
+        <span>
+          Step {step + 1} of {TOTAL_STEPS}
+        </span>
         <div className="onboarding-progress-bar">
           <div
             className="onboarding-progress-fill"
-            style={{ width: `${((step + 1) / 6) * 100}%` }}
+            style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
           />
         </div>
       </div>
@@ -144,14 +148,14 @@ export default function OnboardingPage() {
                 conversation.
               </li>
               <li>
-                <span>⟁</span>Your API key stays in your browser. It never
-                touches our servers.
-              </li>
-              <li>
                 <span>◈</span>Your memory is exportable and portable. You own it.
               </li>
               <li>
-                <span>◬</span>Pick your model. Swap it anytime.
+                <span>⟁</span>Row-level security. Only you can read your data.
+              </li>
+              <li>
+                <span>◬</span>Swap in agents: meal planning, email triage,
+                coach, signal keeper.
               </li>
             </ul>
             <button className="onboarding-primary" onClick={() => setStep(1)}>
@@ -265,16 +269,17 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <label className="onboarding-label">Choose a color</label>
+            <label className="onboarding-label">Choose an accent color</label>
             <div className="onboarding-color-row">
-              {PRESET_COLORS.map((c) => (
+              {THEME_SEEDS.map((seed) => (
                 <button
-                  key={c}
+                  key={seed.hex}
                   type="button"
-                  className={`onboarding-swatch${color === c ? ' is-active' : ''}`}
-                  style={{ background: c }}
-                  onClick={() => setColor(c)}
-                  aria-label={c}
+                  className={`onboarding-swatch${color === seed.hex ? ' is-active' : ''}`}
+                  style={{ background: seed.hex }}
+                  onClick={() => setColor(seed.hex)}
+                  aria-label={seed.name}
+                  title={seed.name}
                 />
               ))}
               <label className="onboarding-swatch-custom" aria-label="Custom color">
@@ -285,6 +290,14 @@ export default function OnboardingPage() {
                 />
                 <span>+</span>
               </label>
+            </div>
+
+            <div className="onboarding-theme-preview">
+              <button type="button" className="onboarding-preview-cta">
+                Send
+              </button>
+              <div className="onboarding-preview-card">Muted surface</div>
+              <span className="onboarding-preview-link">Accent link</span>
             </div>
 
             <div className="onboarding-actions">
@@ -326,83 +339,20 @@ export default function OnboardingPage() {
               onChange={(e) => setImportText(e.target.value)}
               placeholder="One fact per line…"
             />
-            <div className="onboarding-actions">
-              <button
-                className="onboarding-ghost"
-                onClick={() => setStep(5)}
-              >
-                Skip for now
-              </button>
-              <button
-                className="onboarding-primary"
-                onClick={() => setStep(5)}
-              >
-                {importText.trim() ? 'Import & continue' : 'Continue'}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {step === 5 && (
-          <section className="onboarding-step">
-            <h2 className="onboarding-title">Connect your AI</h2>
-
-            <label className="onboarding-label">Provider</label>
-            <div className="onboarding-provider-row">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={`onboarding-provider${provider === p.id ? ' is-active' : ''}`}
-                  onClick={() => setProvider(p.id)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {provider !== 'ollama' && (
-              <>
-                <label className="onboarding-label">API key</label>
-                <input
-                  type="password"
-                  className="onboarding-input"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={
-                    provider === 'claude' ? 'sk-ant-…' : 'sk-…'
-                  }
-                />
-                <p className="onboarding-sovereign">
-                  🔒 Stored on your device only.
-                </p>
-              </>
-            )}
-
-            {provider === 'ollama' && (
-              <p className="onboarding-muted">
-                Make sure Ollama is running locally on port 11434.
-              </p>
-            )}
-
             {error && <p className="onboarding-error">{error}</p>}
-
             <div className="onboarding-actions">
               <button
                 className="onboarding-ghost"
-                onClick={() => setStep(4)}
+                onClick={() => setStep(3)}
               >
                 Back
               </button>
               <button
                 className="onboarding-primary"
-                disabled={
-                  saving ||
-                  (provider !== 'ollama' && apiKey.trim().length < 4)
-                }
+                disabled={saving}
                 onClick={finish}
               >
-                {saving ? 'Saving…' : 'Start remembering'}
+                {saving ? 'Saving…' : 'Start'}
               </button>
             </div>
           </section>

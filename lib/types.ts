@@ -46,6 +46,11 @@ export interface UserProfile {
   assistant_name: string
   created_at: string
   settings: Record<string, unknown>
+  onboarding_completed_at: string | null
+  kitchen_onboarded_at: string | null
+  inbox_onboarded_at: string | null
+  coach_onboarded_at: string | null
+  signal_onboarded_at: string | null
 }
 
 export interface Message {

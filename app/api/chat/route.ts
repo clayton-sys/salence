@@ -22,20 +22,12 @@ interface ChatBody {
 }
 
 export async function POST(req: Request) {
-  // Header names are case-insensitive but we send x-salence-api-key.
-  // Trim defensively — some proxies/edge layers pad headers with spaces.
-  const rawKey = req.headers.get('x-salence-api-key') ?? ''
-  const apiKey = rawKey.trim()
-  if (!apiKey) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
-      { error: 'Missing API key. Open Settings → Your AI to paste your key.' },
-      { status: 400 }
+      { error: 'Server is missing ANTHROPIC_API_KEY. Contact the admin.' },
+      { status: 500 }
     )
   }
-  // Helpful diagnostic: log length + prefix only, never the key itself.
-  console.log(
-    `[/api/chat] key length=${apiKey.length} prefix=${apiKey.slice(0, 7)}…`
-  )
 
   let body: ChatBody
   try {
@@ -52,7 +44,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
-  // Fetch context: domain records + recent records, dedup, cap at 10
   const [{ data: domainRows }, { data: recentRows }] = await Promise.all([
     supabase
       .from('records')
@@ -96,9 +87,10 @@ ${contextLines || '(nothing yet — this is your first exchange)'}
 Be warm, conversational, and genuinely helpful.
 Reference what you know naturally when relevant.
 If something seems outdated, gently flag it.
-Keep responses conversational — this is a chat, not a report.`
+Keep responses conversational — this is a chat, not a report.
 
-  // Fold prior history into the user message since modelCall sends one user turn.
+You may use Markdown formatting (headings, bold, lists, code blocks, tables, links) to make responses easier to read.`
+
   const history = (body.history || []).slice(-20)
   const transcriptBlock = history
     .map((m) => `${m.role === 'user' ? body.userName : body.assistantName}: ${m.content}`)
@@ -108,8 +100,6 @@ Keep responses conversational — this is a chat, not a report.`
     ? `Prior exchange:\n${transcriptBlock}\n\nLatest message from ${body.userName}: ${body.message}`
     : body.message
 
-  // Build content blocks. Claude wants documents/images BEFORE the question text,
-  // so the model reads the attachment first and then the instruction.
   const blocks: ContentBlock[] = []
   const att = body.attachment
   if (att) {
@@ -138,7 +128,6 @@ Keep responses conversational — this is a chat, not a report.`
   try {
     const reply = await modelCall({
       taskType: 'chat',
-      apiKey,
       systemPrompt,
       content: blocks,
     })

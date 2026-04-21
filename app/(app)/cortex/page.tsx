@@ -56,11 +56,6 @@ export default function CortexPage() {
 
   async function runNow(id: string) {
     if (!userId) return
-    const apiKey = localStorage.getItem('salence_api_key') || ''
-    if (!apiKey) {
-      alert('Add your API key in Settings first.')
-      return
-    }
     setRunningId(id)
     try {
       if (id === 'fact_extractor') {
@@ -80,8 +75,6 @@ export default function CortexPage() {
             body: JSON.stringify({
               message: rec.data.content,
               domain: rec.data.domain,
-              userId,
-              apiKey,
             }),
           })
         }
@@ -89,7 +82,6 @@ export default function CortexPage() {
         await fetch('/api/agents/expiry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, apiKey }),
         })
       }
       await loadRuns()

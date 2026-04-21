@@ -4,23 +4,16 @@ import { modelCall } from '@/lib/model-router'
 
 export const runtime = 'nodejs'
 
-export async function POST(req: Request) {
-  let body: { userId: string; apiKey: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  if (!body.apiKey) {
-    return NextResponse.json({ flagged: 0, skipped: 'no-key' })
+export async function POST() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ flagged: 0, skipped: 'no-server-key' })
   }
 
   const supabase = await getServerSupabase()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.id !== body.userId) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
@@ -53,7 +46,6 @@ export async function POST(req: Request) {
     try {
       const raw = await modelCall({
         taskType: 'decay_check',
-        apiKey: body.apiKey,
         systemPrompt: `Is this memory still likely relevant to someone's life? Reply ONLY with JSON: {stillRelevant: boolean, reason: string}`,
         userMessage: `Memory: "${record.content}" (created ${record.created_at})`,
       })

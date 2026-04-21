@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { saveRecord, makeRecord } from '@/lib/memory-kernel'
 import { useProfile } from '@/lib/profile-context'
+import { ChatMessage } from '@/components/chat/ChatMessage'
 import type { Message } from '@/lib/types'
 
 // minimal typing for SpeechRecognition (not in lib.dom by default)
@@ -53,7 +54,6 @@ export default function ChatPage() {
   const [voiceSupported, setVoiceSupported] = useState(false)
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const [attachError, setAttachError] = useState<string | null>(null)
-  const [apiKey, setApiKey] = useState('')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -70,19 +70,14 @@ export default function ChatPage() {
     setVoiceSupported(!!Ctor)
   }, [])
 
-  // Read the API key after mount (post-hydration) so SSR and client render agree,
-  // and re-read when the tab regains focus in case Settings just updated it.
+  // One-time cleanup: remove legacy per-user API keys so returning users
+  // don't have orphaned keys hanging around in localStorage.
   useEffect(() => {
-    const read = () => {
-      const raw = localStorage.getItem('salence_api_key') ?? ''
-      // Trim defensively: mobile keyboards / clipboards sometimes wrap pasted
-      // keys in whitespace or quotes, and invisible characters survive save.
-      const cleaned = raw.trim().replace(/^["']|["']$/g, '')
-      setApiKey(cleaned)
+    try {
+      localStorage.removeItem('salence_api_key')
+    } catch {
+      /* localStorage blocked */
     }
-    read()
-    window.addEventListener('focus', read)
-    return () => window.removeEventListener('focus', read)
   }, [])
 
   useEffect(() => {
@@ -224,22 +219,6 @@ export default function ChatPage() {
     const text = input.trim()
     if (!text || !userId || thinking) return
 
-    // Block the request up-front if there's no key — rather than sending
-    // an empty/invalid request and waiting for a confusing server error.
-    if (!apiKey) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            'I need your API key to respond. Open Settings → Your AI, paste your key, and click Save provider.',
-          ts: Date.now(),
-          err: true,
-        },
-      ])
-      return
-    }
-
     const now = Date.now()
     const sent = attachment
     const displayContent = sent
@@ -267,33 +246,19 @@ export default function ChatPage() {
     )
 
     // fire-and-forget fact extraction
-    if (apiKey) {
-      fetch('/api/agents/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          domain: activeDomain,
-          userId,
-          apiKey,
-        }),
-      }).finally(() => refreshMemoryCount())
-    }
+    fetch('/api/agents/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        domain: activeDomain,
+      }),
+    }).finally(() => refreshMemoryCount())
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-salence-api-key': apiKey,
-          Authorization: session?.access_token
-            ? `Bearer ${session.access_token}`
-            : '',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
           domain: activeDomain,
@@ -352,7 +317,7 @@ export default function ChatPage() {
         ...prev,
         {
           role: 'assistant',
-          content: `I hit a snag: ${(err as Error).message}. Check your API key in Settings.`,
+          content: `I hit a snag: ${(err as Error).message}`,
           ts: Date.now(),
           err: true,
         },
@@ -382,12 +347,12 @@ export default function ChatPage() {
         )}
 
         {messages.map((m, i) => (
-          <div
+          <ChatMessage
             key={i}
-            className={`chat-bubble chat-bubble-${m.role}${m.err ? ' is-error' : ''}`}
-          >
-            {m.content}
-          </div>
+            role={m.role}
+            content={m.content}
+            err={m.err}
+          />
         ))}
 
         {thinking && (

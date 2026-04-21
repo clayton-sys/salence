@@ -8,11 +8,13 @@ export const runtime = 'nodejs'
 interface ExtractBody {
   message: string
   domain: Domain
-  userId: string
-  apiKey: string
 }
 
 export async function POST(req: Request) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ extracted: 0, skipped: 'no-server-key' })
+  }
+
   let body: ExtractBody
   try {
     body = (await req.json()) as ExtractBody
@@ -20,22 +22,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  if (!body.apiKey) {
-    return NextResponse.json({ extracted: 0, skipped: 'no-key' })
-  }
-
   const supabase = await getServerSupabase()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.id !== body.userId) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
   try {
     const raw = await modelCall({
       taskType: 'extract_facts',
-      apiKey: body.apiKey,
       systemPrompt: `Extract key personal facts from this message. Reply ONLY with a JSON array: [{fact: string, contentType: string, tags: string[]}]. Content types: fact | decision | question | health | family | work. Return [] if no clear facts. Keep facts concise and specific.`,
       userMessage: body.message,
     })
@@ -57,7 +54,6 @@ export async function POST(req: Request) {
         domain: body.domain,
         tags: Array.isArray(f.tags) ? f.tags : [],
         source: 'agent',
-        // vector intentionally omitted in v1 — pgvector column rejects empty arrays.
         weight: 0.5,
         status: 'active',
         contradicts: [],

@@ -51,14 +51,11 @@ async function logAgentRun(
 export async function runFactExtractor(
   message: string,
   domain: Domain,
-  userId: string,
-  apiKey: string
+  userId: string
 ): Promise<{ extracted: number }> {
-  if (!apiKey) return { extracted: 0 }
   try {
     const raw = await modelCall({
       taskType: 'extract_facts',
-      apiKey,
       systemPrompt: `Extract key personal facts from this message. Reply ONLY with a JSON array: [{fact: string, contentType: string, tags: string[]}]. Content types: fact | decision | question | health | family | work. Return [] if no clear facts. Keep facts concise and specific.`,
       userMessage: message,
     })
@@ -89,10 +86,8 @@ export async function runFactExtractor(
 }
 
 export async function runExpiryWatcher(
-  userId: string,
-  apiKey: string
+  userId: string
 ): Promise<{ flagged: number }> {
-  if (!apiKey) return { flagged: 0 }
   const records = await getRecentRecords(userId, 50)
   const old = records
     .filter((r) => {
@@ -110,7 +105,6 @@ export async function runExpiryWatcher(
     try {
       const raw = await modelCall({
         taskType: 'decay_check',
-        apiKey,
         systemPrompt: `Is this memory still likely relevant to someone's life? Reply ONLY with JSON: {stillRelevant: boolean, reason: string}`,
         userMessage: `Memory: "${record.content}" (created ${record.created_at})`,
       })
