@@ -34,7 +34,7 @@ export const kitchenSteward: AgentDefinition = {
       id: 'budget',
       question: "What's your weekly grocery budget?",
       type: 'select',
-      options: ['<$75', '$75-150', '$150-250', '$250+'],
+      options: ['under $75', '$75-150', '$150-250', '$250+'],
     },
     {
       id: 'cuisines',
@@ -50,7 +50,7 @@ export const kitchenSteward: AgentDefinition = {
       id: 'meals_per_week',
       question: 'How many meals per week should I plan?',
       type: 'select',
-      options: ['3', '5', '7', 'all meals'],
+      options: ['3', '5', '7', 'every meal'],
     },
     {
       id: 'display_name',
