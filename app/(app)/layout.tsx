@@ -17,15 +17,11 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('onboarding_completed_at, assistant_name')
+    .select('onboarding_completed_at')
     .eq('id', user.id)
     .maybeSingle()
 
-  // Gate on the authoritative flag. Fall back to assistant_name for users
-  // who completed onboarding before the column existed.
-  const done =
-    !!profile?.onboarding_completed_at || !!profile?.assistant_name
-  if (!done) redirect('/onboarding')
+  if (!profile?.onboarding_completed_at) redirect('/onboarding')
 
   return (
     <ProfileProvider>

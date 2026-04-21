@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { saveRecord, makeRecord } from '@/lib/memory-kernel'
 import { upsertProfile } from '@/lib/profile'
-import { THEME_SEEDS } from '@/lib/theme'
+import { THEME_SEEDS, deriveTheme, themeStyleVars } from '@/lib/theme'
 import { ALL_DOMAINS, DOMAIN_META, type Domain } from '@/lib/types'
 
 const ASSISTANT_SUGGESTIONS = ['Nova', 'Atlas', 'Sage', 'Echo', 'Iris']
@@ -113,10 +113,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const themeStyle = {
-    ['--user-color' as string]: color,
-    ['--accent' as string]: color,
-  } as React.CSSProperties
+  const themeStyle = themeStyleVars(deriveTheme(color)) as React.CSSProperties
 
   return (
     <main className="onboarding-shell" style={themeStyle}>

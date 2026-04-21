@@ -19,16 +19,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const color = profile?.user_color || '#C8A96E'
   const assistantName = profile?.assistant_name || 'Nova'
   const domains = (profile?.domains || ['personal']) as Domain[]
-
-  const themeStyle = {
-    ['--user-color' as string]: color,
-    ['--user-color-dim' as string]: `color-mix(in srgb, ${color} 15%, transparent)`,
-    ['--user-color-border' as string]: `color-mix(in srgb, ${color} 25%, transparent)`,
-    ['--user-color-glow' as string]: `color-mix(in srgb, ${color} 10%, transparent)`,
-  } as React.CSSProperties
 
   // close drawer when the route changes
   useEffect(() => {
@@ -51,10 +43,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div
-      className={`app-shell${sidebarOpen ? ' sidebar-open' : ''}`}
-      style={themeStyle}
-    >
+    <div className={`app-shell${sidebarOpen ? ' sidebar-open' : ''}`}>
       <button
         type="button"
         className="app-hamburger"
