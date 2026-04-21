@@ -1692,3 +1692,86 @@ a { color: inherit; text-decoration: none; }
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ─── modals (agent onboarding, run, settings) ───── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  animation: fadeIn 0.15s ease;
+}
+.modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+.modal-wide { max-width: 780px; }
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.modal-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+.modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.modal-close:hover {
+  color: var(--text);
+  background: var(--bg-card);
+}
+.modal-progress {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.modal-progress-fill {
+  height: 100%;
+  background: var(--accent-gradient);
+  transition: width 200ms ease;
+}
+.modal-question {
+  margin: 4px 0 0;
+  font-size: 16px;
+  color: var(--text);
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.modal-body-scroll {
+  overflow-y: auto;
+  max-height: 70vh;
+}
+.modal-foot {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}

@@ -53,9 +53,18 @@ export interface UserProfile {
   signal_onboarded_at: string | null
 }
 
+export interface AssistantContentBlock {
+  type: 'text' | 'tool_use' | 'tool_status'
+  text?: string
+  id?: string
+  name?: string
+  input?: Record<string, unknown>
+  label?: string
+}
+
 export interface Message {
   role: 'user' | 'assistant'
-  content: string
+  content: string | AssistantContentBlock[]
   ts: number
   err?: boolean
 }

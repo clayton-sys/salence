@@ -36,6 +36,25 @@ const ACCEPTED_TYPES = [
 ]
 const MAX_FILE_BYTES = 10 * 1024 * 1024 // 10MB
 
+// Flatten content blocks to plain text for record storage + history replay.
+type MaybeBlock = {
+  type?: string
+  text?: string
+  name?: string
+  input?: Record<string, unknown>
+}
+function flattenToText(content: string | MaybeBlock[]): string {
+  if (typeof content === 'string') return content
+  return content
+    .map((b) => {
+      if (b.type === 'text' && b.text) return b.text
+      if (b.type === 'tool_use' && b.name) return `[card: ${b.name}]`
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 interface PendingAttachment {
   file: File
   kind: 'image' | 'document'
@@ -266,7 +285,7 @@ export default function ChatPage() {
           userName,
           history: next.slice(-20).map((m) => ({
             role: m.role,
-            content: m.content,
+            content: typeof m.content === 'string' ? m.content : flattenToText(m.content),
           })),
           attachment: sent
             ? {
@@ -280,16 +299,17 @@ export default function ChatPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Chat failed')
-      const reply = data.reply || '...'
+      const blocks = Array.isArray(data.content) ? data.content : []
+      const replyText = flattenToText(blocks) || '...'
 
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: reply, ts: Date.now() },
+        { role: 'assistant', content: blocks.length ? blocks : replyText, ts: Date.now() },
       ])
 
       await saveRecord(
         makeRecord({
-          content: reply,
+          content: replyText,
           contentType: 'conversation',
           domain: activeDomain,
           tags: ['assistant'],
@@ -299,7 +319,7 @@ export default function ChatPage() {
       )
 
       if (sent) {
-        const summary = reply.replace(/\s+/g, ' ').trim().slice(0, 180)
+        const summary = replyText.replace(/\s+/g, ' ').trim().slice(0, 180)
         await saveRecord(
           makeRecord({
             content: `User uploaded ${sent.filename} — ${summary}`,

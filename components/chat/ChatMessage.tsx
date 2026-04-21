@@ -3,18 +3,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { renderCard, type CardToolUse } from '@/components/cards'
-
-export interface AssistantContentBlock {
-  type: 'text' | 'tool_use' | 'tool_status'
-  // text block
-  text?: string
-  // tool_use block (may be a card_* tool or a real tool — we dispatch on name)
-  id?: string
-  name?: string
-  input?: Record<string, unknown>
-  // tool_status block — passive indicator for real tools running server-side
-  label?: string
-}
+import type { AssistantContentBlock } from '@/lib/types'
 
 type MessageRole = 'user' | 'assistant'
 

@@ -1,97 +1,91 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AGENT_CONFIGS, getAgentRuns } from '@/lib/agents'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useProfile } from '@/lib/profile-context'
+import { AGENT_LIST } from '@/lib/agents/registry'
+import type { AgentProfile } from '@/lib/agents/types'
+import { AgentOnboardModal } from '@/components/agents/AgentOnboardModal'
+import { AgentRunModal } from '@/components/agents/AgentRunModal'
+import { AgentSettingsModal } from '@/components/agents/AgentSettingsModal'
 
-type Run = {
+interface Run {
   id: string
   agent_id: string
   ran_at: string
+  status: string | null
+  summary: string | null
   result: Record<string, unknown>
 }
 
 export default function CortexPage() {
-  const { userId, profile, refreshProfile, refreshMemoryCount } = useProfile()
+  const { userId, profile } = useProfile()
+  const router = useRouter()
+  const [profiles, setProfiles] = useState<Record<string, AgentProfile>>({})
   const [runs, setRuns] = useState<Run[]>([])
-  const [runningId, setRunningId] = useState<string | null>(null)
+  const [onboarding, setOnboarding] = useState<string | null>(null)
+  const [running, setRunning] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
 
-  const agentState =
-    ((profile?.settings as Record<string, unknown>)?.agents as Record<
-      string,
-      boolean
-    >) || {}
+  const loadProfiles = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase
+      .from('agent_profiles')
+      .select('*')
+      .eq('user_id', userId)
+    const map: Record<string, AgentProfile> = {}
+    for (const p of data || []) map[p.agent_id] = p as AgentProfile
+    setProfiles(map)
+  }, [userId])
 
   const loadRuns = useCallback(async () => {
     if (!userId) return
-    const rows = await getAgentRuns(userId, 10)
-    setRuns(rows as Run[])
+    const { data } = await supabase
+      .from('agent_runs')
+      .select('id, agent_id, ran_at, status, summary, result')
+      .eq('user_id', userId)
+      .in(
+        'agent_id',
+        AGENT_LIST.map((a) => a.id)
+      )
+      .order('ran_at', { ascending: false })
+      .limit(20)
+    setRuns((data as Run[]) || [])
   }, [userId])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!userId) return
+    /* eslint-disable react-hooks/set-state-in-effect */
+    loadProfiles()
     loadRuns()
-  }, [loadRuns])
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [userId, loadProfiles, loadRuns])
 
-  function isActive(id: string) {
-    const cfg = AGENT_CONFIGS.find((a) => a.id === id)
-    if (id in agentState) return agentState[id]
-    return cfg?.active ?? false
+  function isOnboarded(id: string): boolean {
+    if (!profile) return false
+    const key = (
+      {
+        'kitchen-steward': 'kitchen_onboarded_at',
+        'inbox-triage': 'inbox_onboarded_at',
+        coach: 'coach_onboarded_at',
+        'signal-keeper': 'signal_onboarded_at',
+      } as const
+    )[id as 'kitchen-steward' | 'inbox-triage' | 'coach' | 'signal-keeper']
+    if (!key) return false
+    return !!profile[key as keyof typeof profile]
   }
 
-  async function toggle(id: string) {
-    if (!userId) return
-    const nextState: Record<string, boolean> = { ...agentState, [id]: !isActive(id) }
-    const nextSettings = {
-      ...(profile?.settings || {}),
-      agents: nextState,
-    }
-    await supabase
-      .from('profiles')
-      .update({ settings: nextSettings })
-      .eq('id', userId)
-    await refreshProfile()
+  async function toggleEnabled(agentId: string, enabled: boolean) {
+    await fetch(`/api/agents/${agentId}/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    })
+    loadProfiles()
   }
 
-  async function runNow(id: string) {
-    if (!userId) return
-    setRunningId(id)
-    try {
-      if (id === 'fact_extractor') {
-        const rec = await supabase
-          .from('records')
-          .select('content, domain')
-          .eq('user_id', userId)
-          .eq('source', 'chat')
-          .eq('content_type', 'conversation')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        if (rec.data) {
-          await fetch('/api/agents/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: rec.data.content,
-              domain: rec.data.domain,
-            }),
-          })
-        }
-      } else if (id === 'expiry_watcher') {
-        await fetch('/api/agents/expiry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
-      await loadRuns()
-      await refreshMemoryCount()
-    } finally {
-      setRunningId(null)
-    }
-  }
-
-  function lastRun(id: string) {
+  function lastRunFor(id: string): string {
     const r = runs.find((x) => x.agent_id === id)
     return r ? new Date(r.ran_at).toLocaleString() : 'never'
   }
@@ -104,34 +98,66 @@ export default function CortexPage() {
       </header>
 
       <div className="cortex-grid">
-        {AGENT_CONFIGS.map((a) => {
-          const active = isActive(a.id)
+        {AGENT_LIST.map((agent) => {
+          const agentProfile = profiles[agent.id]
+          const onboarded = isOnboarded(agent.id)
+          const displayName =
+            agentProfile?.display_name || agent.default_display_name
+          const enabled = agentProfile?.enabled ?? true
           return (
-            <article key={a.id} className="cortex-card">
-              <div className="cortex-card-head">
-                <span className="cortex-emoji">{a.emoji}</span>
-                <div>
-                  <h3>{a.label}</h3>
-                  <p>{a.description}</p>
+            <article
+              key={agent.id}
+              className={`cortex-agent-card${!enabled ? ' is-disabled' : ''}`}
+            >
+              <div className="cortex-agent-head">
+                <div className="cortex-agent-emoji">{agent.emoji}</div>
+                <div className="cortex-agent-body">
+                  <h3>{displayName}</h3>
+                  <p>{agent.description}</p>
+                  <div className="cortex-agent-meta">
+                    <span>last run: {lastRunFor(agent.id)}</span>
+                    {agentProfile?.voice && <span>· voice: {agentProfile.voice}</span>}
+                  </div>
                 </div>
-                <label className="cortex-toggle">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => toggle(a.id)}
-                  />
-                  <span />
-                </label>
+                {onboarded && (
+                  <label className="cortex-toggle">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => toggleEnabled(agent.id, e.target.checked)}
+                    />
+                    <span />
+                  </label>
+                )}
               </div>
-              <div className="cortex-card-foot">
-                <span className="cortex-last">Last run: {lastRun(a.id)}</span>
-                <button
-                  className="cortex-run"
-                  disabled={runningId === a.id}
-                  onClick={() => runNow(a.id)}
-                >
-                  {runningId === a.id ? 'Running…' : 'Run now'}
-                </button>
+              <div className="cortex-agent-actions">
+                {!onboarded ? (
+                  <button
+                    type="button"
+                    className="card-primary"
+                    onClick={() => setOnboarding(agent.id)}
+                  >
+                    Get started with {agent.default_display_name}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="card-primary"
+                      disabled={!enabled || running === agent.id}
+                      onClick={() => setRunning(agent.id)}
+                    >
+                      {running === agent.id ? 'Running…' : 'Run now'}
+                    </button>
+                    <button
+                      type="button"
+                      className="card-ghost"
+                      onClick={() => setEditing(agent.id)}
+                    >
+                      Settings
+                    </button>
+                  </>
+                )}
               </div>
             </article>
           )
@@ -149,12 +175,45 @@ export default function CortexPage() {
                 {new Date(r.ran_at).toLocaleString()}
               </span>
               <span className="cortex-log-result">
-                {JSON.stringify(r.result)}
+                {r.status || '—'}
+                {r.summary ? ` · ${r.summary.slice(0, 80)}` : ''}
               </span>
             </li>
           ))}
         </ul>
       </section>
+
+      {onboarding && (
+        <AgentOnboardModal
+          agentId={onboarding}
+          onClose={() => setOnboarding(null)}
+          onDone={() => {
+            setOnboarding(null)
+            router.refresh()
+            loadProfiles()
+          }}
+        />
+      )}
+      {running && (
+        <AgentRunModal
+          agentId={running}
+          onClose={() => {
+            setRunning(null)
+            loadRuns()
+          }}
+        />
+      )}
+      {editing && profiles[editing] && (
+        <AgentSettingsModal
+          agentId={editing}
+          agentProfile={profiles[editing]}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            loadProfiles()
+          }}
+        />
+      )}
     </section>
   )
 }
