@@ -1,97 +1,135 @@
 # Salence — STATE.md
 
-Last updated: 2026-04-20
+Last updated: 2026-04-21 (Session 2)
 
-## What's built (v1)
+## What's built
 
 ### Scaffold
 - Next.js 16.2.4 (App Router, Turbopack, React 19.2)
 - Tailwind v4, TypeScript, ESLint
-- Installed: `@supabase/supabase-js`, `@supabase/auth-helpers-nextjs`, `pdf-lib`,
-  `uuid`, `next-pwa` (unused — see PWA note)
+- Installed: `@supabase/supabase-js`, `@supabase/auth-helpers-nextjs`,
+  `pdf-lib`, `uuid`, `next-pwa` (unused), `culori`, `react-markdown`,
+  `remark-gfm`
 
 ### Core architecture
-- `lib/supabase.ts` — browser client via `createBrowserClient` (session cookies, RLS-aware)
-- `lib/supabase-server.ts` — server client via `createServerClient` + async `cookies()`
-- `lib/types.ts` — `MemoryRecord`, `UserProfile`, `ContentType`, `Domain`,
-  `RecordStatus`, `Message`, `AgentConfig`, `DOMAIN_META`, `ALL_DOMAINS`
-- `lib/model-router.ts` — `MODEL_CONFIG` (grunt=Haiku 4.5, reason=Sonnet 4.6), `TASK_TIER`, `modelCall()`
-- `lib/memory-kernel.ts` — `makeRecord`, `saveRecord`, `getRecentRecords`,
-  `getRecordsByDomain`, `getContextForChat`, `expireRecord`, `getAllRecords`, `countActiveRecords`
-- `lib/agents.ts` — `AGENT_CONFIGS` (fact_extractor, expiry_watcher, contradiction_flag),
-  `runFactExtractor`, `runExpiryWatcher`, `getAgentRuns`
-- `lib/profile.ts` — `getProfile`, `upsertProfile`, `deriveColorVars`, `PRESET_COLORS`
-- `lib/profile-context.tsx` — `ProfileProvider` + `useProfile()` with memory count
+- `lib/supabase.ts` — browser client via `createBrowserClient`
+- `lib/supabase-server.ts` — server client via `createServerClient`
+- `lib/types.ts` — `MemoryRecord`, `UserProfile` (extended with
+  onboarding + per-agent timestamps), `AssistantContentBlock`, etc.
+- `lib/model-router.ts` — `MODEL_CONFIG` (grunt=Haiku 4.5, reason=Sonnet
+  4.6), `TASK_TIER`, `modelCall` (text), `modelCallFull` (preserves
+  tool_use blocks). Server-side API key from `process.env.ANTHROPIC_API_KEY`.
+- `lib/memory-kernel.ts` — record CRUD + recency retrieval
+- `lib/profile.ts` — profile helpers
+- `lib/profile-context.tsx` — `ProfileProvider` + `useProfile()`
+- `lib/theme.ts` — OKLCH derivation from seed hex (6 tokens)
+- `lib/theme-provider.tsx` — client provider that writes CSS vars
+- `lib/cards.ts` — 7 card tool schemas for Anthropic tool_use
+- `lib/tools.ts` — real tool registry with auto vs. confirm split
+- `lib/tools/impls.ts` — server-side tool implementations
+- `lib/agents/*` — agent runtime (types, registry, runner, voices) +
+  four agents (kitchen-steward, inbox-triage, coach, signal-keeper)
+- `lib/agents-legacy.ts` — old v1 fact_extractor + expiry_watcher
+  (kept for /api/agents/extract + /api/agents/expiry)
 
 ### Routes
 - `/` → redirects to `/chat`
-- `/auth` — magic-link page
-- `/auth/callback` — OAuth code exchange + route based on profile presence
-- `/onboarding` — 6-step flow (0-5): welcome → about → domains → name+color → import → provider
-- `/(app)/chat` — conversation with voice input, fact-extractor fire-and-forget
-- `/(app)/memory` — record grid with domain filter + JSON export
-- `/(app)/cortex` — agent cards with toggle + activity log
-- `/(app)/settings` — assistant, provider/API key, model routing view, sovereignty actions
-- `/api/chat` — context-aware Claude call (API key via header, never stored server-side)
-- `/api/agents/extract` — fact extractor endpoint
-- `/api/agents/expiry` — decay watcher endpoint
+- `/auth` + `/auth/callback` — magic-link
+- `/onboarding` — 5-step flow (welcome → about → domains → name+color
+  → import). Writes `onboarding_completed_at`.
+- `/(app)/chat` — markdown rendering via `ChatMessage`, inline card
+  rendering via tool_use
+- `/(app)/memory` — record grid + JSON export
+- `/(app)/cortex` — agent cards, onboarding/run/settings modals
+- `/(app)/settings` — assistant name + theme seed + domain picker +
+  sovereignty (export/delete)
+- `/api/chat` — Claude call with CARD_TOOLS attached; returns content
+  blocks
+- `/api/agents/extract` + `/api/agents/expiry` — legacy
+- `/api/agents/[agent_id]/run` — tool-use loop for new agents
+- `/api/agents/[agent_id]/onboard` — first-run interview save
+- `/api/agents/[agent_id]/profile` — GET/PATCH agent_profiles
+- `/api/agents/coach/log-session` — workout session logger
+- `/api/tools/execute` — confirm-tool executor (called from
+  ConfirmActionCard)
+- `/api/drafts` — create drafts row
+
+### Components
+- `components/chat/ChatMessage.tsx` — markdown + card dispatcher
+- `components/cards/` — 7 card components
+  - `MealPlanCard`, `ShoppingListCard`, `WorkoutSessionCard`,
+    `EmailDigestCard`, `ArticleBriefCard`, `WeeklySummaryCard`,
+    `ConfirmActionCard`
+- `components/agents/` — `AgentOnboardModal`, `AgentRunModal`,
+  `AgentSettingsModal`
 
 ### Supabase
-- `supabase/migrations/0001_init.sql` — tables: `profiles`, `records`, `agent_runs`
-  with RLS policies scoped by `auth.uid()`
-- Migration NOT yet run — user needs to paste it into the SQL editor of project
-  `uqsdgccepyuztpeygckj`
+- `0001_init.sql` — profiles, records, agent_runs + RLS
+- `0002_onboarding_and_agents.sql` — profile columns
+  (onboarding_completed_at + 4 per-agent onboarded_at) +
+  auto-create-profile trigger on auth.users insert
+- `0003_phase2_tables.sql` — agent_profiles, drafts, agent_runs
+  extensions (trigger/status/summary/records_created)
 
-### PWA
-- `public/manifest.json` + `public/icon-192.svg` + `public/icon-512.svg` (placeholders)
-- `next-pwa@5` is webpack-only and incompatible with Next 16's default Turbopack
-  bundler — service worker deferred to v2 (needs Serwist or similar)
+## What needs manual steps (user)
 
-### Styles
-- `app/globals.css` with DM Sans + Space Mono via `next/font`, dark-only
-- CSS variables: `--bg`, `--border`, `--text`, `--accent`, plus user-color derivatives
-  computed via `color-mix()`
+1. **Run migrations** in Supabase SQL editor (project `uqsdgccepyuztpeygckj`),
+   in order:
+   - `0001_init.sql` (if not already run)
+   - `0002_onboarding_and_agents.sql`
+   - `0003_phase2_tables.sql`
+2. **Vercel env vars** — add `ANTHROPIC_API_KEY` with the same value as
+   `.env.local` to Production, Preview, and Development environments.
+3. Log in as Clayton + Kelsey, verify chat still works.
+4. Onboard each agent from Cortex and try "Run now".
 
-### Proxy (was middleware)
-- `proxy.ts` (renamed from `middleware.ts`; exports `proxy` fn per Next 16)
-- Redirects unauthenticated users to `/auth`, signed-in users away from `/auth`
+## Verification checklist
 
-## Deviations from spec
-1. `@supabase/auth-helpers-nextjs@0.15.0` is a shim for `@supabase/ssr`. The
-   functions named in the spec (`createClientComponentClient`,
-   `createRouteHandlerClient`, `createMiddlewareClient`) do NOT exist at this
-   version. Rewrote against `createBrowserClient` + `createServerClient` + manual
-   cookie `getAll`/`setAll`. Same functional behavior, RLS-compliant.
-2. `middleware.ts` → `proxy.ts`. Next 16 deprecated the `middleware` file
-   convention in favor of `proxy`. Behavior identical.
-3. `next-pwa` was installed per spec but not wired into the build. Next 16
-   defaults to Turbopack; `next-pwa@5` only supports webpack. Manifest stays
-   (enables "Add to home screen"), full SW deferred to v2.
-4. PWA icons are SVG placeholders (user approved). TODO: replace with PNGs.
+- [x] `npm run build` passes (18 routes)
+- [x] `tsc --noEmit` clean
+- [x] `npm run lint` clean
+- [ ] Magic-link signup lands on /onboarding, completion goes to /chat
+- [ ] Mobile chat: hamburger, no key prompt, markdown renders
+- [ ] Color picker: pink seed → pink accents across send button, cards,
+      links; neutral bg + text preserved
+- [ ] Chat emits a card when asked ("show me a sample meal plan")
+- [ ] Each agent first-run interview completes
+- [ ] "Run now" from Cortex produces cards (Kitchen / Coach / Signal
+      will; Inbox will render the Gmail-not-connected message)
+- [ ] Confirm-tool routing: send_email via card_confirm_action only
+- [ ] RLS: cross-user isolation on agent_profiles, drafts, records
 
-## DoD status
-- [x] `npm run build` passes (14 routes generated)
-- [x] No TypeScript errors (`tsc --noEmit` clean)
-- [x] ESLint clean
-- [ ] Magic link auth — needs manual test after Supabase migration is run
-- [ ] Onboarding saves profile — needs manual test
-- [ ] API key persists in localStorage — implemented
-- [ ] Chat end-to-end — needs manual test
-- [ ] Memory records written — needs manual test
-- [ ] Memory view — implemented
-- [ ] Domain switching — implemented (active domain passed to /api/chat)
-- [ ] Voice input — implemented (Web Speech API; Chrome/Edge/Safari only)
-- [ ] Cortex toggles — implemented
-- [ ] Settings updates profile — implemented
-- [ ] Export downloads JSON — implemented
-- [ ] PWA manifest — valid JSON, referenced from `<head>`; no service worker in v1
-- [x] No TypeScript errors
-- [ ] RLS — policies in migration file; needs migration to be run + manual verify
+## Deviations / notes
 
-## Next session picks-up
-1. User runs `supabase/migrations/0001_init.sql` in Supabase SQL editor
-2. `npm run dev` → localhost:3000 → walk through magic-link → onboarding → chat
-3. Confirm records appearing in Supabase `records` table
-4. Swap next-pwa for a Turbopack-compatible PWA (Serwist) in v2
-5. Replace SVG PWA icons with PNGs
-6. Add pgvector similarity search (v2)
+- `@supabase/auth-helpers-nextjs@0.15.0` is a shim for `@supabase/ssr`;
+  we use `createBrowserClient` + `createServerClient` directly.
+- `middleware.ts` → `proxy.ts` (Next 16).
+- `next-pwa@5` is webpack-only; full SW deferred to v2.
+- Gmail/Calendar tool implementations are stubs returning
+  `{ error: 'not connected' }`. OAuth wiring lands in v2.
+- `search_web` uses DuckDuckGo HTML scrape (no API key). V2 should swap
+  in Brave/Serper/Tavily for reliability.
+- Legacy fact_extractor + expiry_watcher still run via their original
+  routes but no longer appear in the Cortex UI. Delete in a later pass.
+- Card tool-use blocks arrive from Anthropic in the same turn as prose —
+  the chat renderer mounts them inline. History is flattened to text
+  for record storage.
+
+## V2 backlog
+
+- Vercel Cron jobs → `/api/agents/[id]/run?trigger=cron` for scheduled
+  runs at each agent's `cadence_hint`
+- pgvector similarity search (replace recency kernel)
+- Gmail + Google Calendar OAuth (unblocks inbox-triage fully)
+- Brave Search / Tavily API for `search_web`
+- Money Mirror agent (5th)
+- Obsidian connector via File System Access API
+- Drag-and-drop uploads + clipboard paste in chat
+- Landing page at salence.app (marketing)
+- Document download from chat (PDF/DOCX export)
+- Shared memory across agents (Kitchen reads Coach's weekly volume to
+  tune protein)
+- Delete legacy fact_extractor/expiry_watcher + lib/agents-legacy.ts
+- Swap next-pwa for Serwist (Turbopack-compatible)
+- Replace SVG PWA icons with PNGs
+- Full streaming chat (Anthropic SSE) instead of one-shot response
