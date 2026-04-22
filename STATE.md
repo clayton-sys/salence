@@ -1,6 +1,129 @@
 # Salence — STATE.md
 
-Last updated: 2026-04-22 (Session 3)
+Last updated: 2026-04-22 (Session 4 — v1.4 shipped)
+
+## Session 4 — v1.4 bug fixes + UX polish (shipped)
+
+Solo dev, committed on `main`, one commit per phase.
+
+### P1 — model_calls logging actually fires (commit 45de03e)
+- Migration 0004 enabled RLS with only a SELECT policy — every insert
+  from the user-scoped supabase client was silently denied, and
+  `logModelCall` wrapped the failure in a bare `catch {}`. Result:
+  cost-tracking table dead on arrival despite the Session 3 call-site
+  instrumentation being correct.
+- `logModelCall` now uses `getServiceSupabase()` internally (RLS bypass
+  is intentional for server-side cost tracking) and surfaces insert
+  errors via `console.error` so regressions show up in Vercel logs.
+- Dropped the unused `supabase` field from `LogContext` and from all
+  six call sites (`/api/chat`, `/api/agents/extract`, agent runner,
+  coach workspace patch, maintenance tagger + pattern-finder).
+
+### P2 — workspace layout keeps the artifact visible (commit e0f02e7)
+- Chat messages now keyed by stable `crypto.randomUUID()` IDs — plus a
+  `busyRef` so a fast double-submit can't race past the React `busy`
+  state. Kills the "double response" glitch.
+- The patch endpoint returns `exercise_index` + `set_index` so the UI
+  can target the exact row that changed.
+- `WorkoutSessionCard` now seeds its local log state from
+  `logged_sets` (used to render as empty — a Session 3 oversight),
+  accepts a `flashTarget` prop, and animates Solar Gold 30% → 0% over
+  800ms on the matching row via keyframes. Scrolls the row into view
+  first if off-screen. Prop-to-state sync uses React 19's render-time
+  idiom to satisfy `react-hooks/set-state-in-effect`.
+- Workspace renders `WorkoutSessionCard` directly for Coach (so it
+  can pass `flashTarget`) and keeps the `ChatMessage` path for the
+  other three agents.
+- Non-patch runs now put only `data.summary` in the chat bubble — the
+  full blocks live in the artifact pane — killing the visual "two
+  identical responses" effect on non-Coach agents.
+- Layout: grid flipped to 60/40 chat/artifact, sticky artifact header
+  with `Last updated` stamp, independent pane scroll. Mobile
+  (<1024px) collapses the artifact to a 60px sticky peek that
+  expands to a full-screen overlay (replaces the old tab toggle).
+- Split `getServiceSupabase` into `lib/supabase-service.ts` so
+  `model-router.ts` can import it without poisoning client bundles
+  with `next/headers` (`/settings` pulls `model-router` for the
+  tier panel).
+
+### P3 — onboarding replaces, doesn't layer (commit e1bcb5b)
+- `/api/agents/[agent_id]/onboard` now hard-deletes prior records
+  matching `(user_id, tags @> ['agent:<id>', 'onboarding'])` before
+  inserting the fresh set. Delete count (or error) logged to console.
+
+### P4 — workout card cleanup (commit 7c9a4ec)
+- New `scripts/grandfather-workout-noise.ts` — idempotent one-time
+  cleanup for pre-1.7B workout_session records (strips "0 sets"
+  noise from `structured_data.exercises` and rebuilds the `content`
+  summary line to match).
+- 1.7A was already in place — `/api/agents/coach/log-session` writes
+  `content_type: 'workout_session'` at route.ts:67. Needs a live
+  post-deploy run to confirm.
+
+### P5 — Session 3 code-verification
+Verified by code-read; runtime checks flagged for Clayton below.
+- Kitchen Steward + Signal Keeper: `tools` arrays include
+  `search_web`; `lib/tools/search/index.ts` defaults to Brave when
+  `SEARCH_PROVIDER` is unset. Failure-handling block in
+  `lib/agents/shared.ts`. Runtime needs `BRAVE_API_KEY`.
+- `/notes` page: CRUD + markdown/obsidian/notion export wired.
+- Contexts: `components/settings/ContextsSection` + chat chips at
+  `components/chat/*` (already exercised in Session 3 QA).
+- Maintenance: `/api/maintenance/run` accepts both
+  `Authorization: Bearer $CRON_SECRET` and
+  `x-maintenance-secret: $MAINTENANCE_SECRET` — use the
+  `x-maintenance-secret` form for manual triggers (the v1.4 prompt
+  mentioned `Bearer $MAINTENANCE_SECRET`, which is not what the
+  route checks for).
+
+## Manual verification (Clayton, post-deploy)
+
+1. **Run the grandfather script once:**
+   ```
+   npx tsx --env-file=.env.local scripts/grandfather-workout-noise.ts
+   ```
+   Expect per-record diff lines + a final `Touched N. Skipped M.` summary.
+
+2. **`model_calls` fires:** run any agent (Coach workspace is fastest)
+   then
+   ```sql
+   SELECT tier, agent_id, COUNT(*), SUM(cost_usd)
+   FROM model_calls
+   WHERE user_id = '7a817f48-cbec-4957-909c-81f0d5748af4'
+   GROUP BY tier, agent_id
+   ORDER BY COUNT(*) DESC;
+   ```
+
+3. **Coach workspace:** message `first set deadlift 225 x 5 rpe 8` —
+   artifact stays visible, row 1 flashes gold, no duplicate reply.
+   Then `swap deadlifts for RDLs` — falls through to Sonnet agent run;
+   chat bubble shows summary only, artifact updates.
+
+4. **Re-onboarding:** re-run Coach interview, verify
+   ```sql
+   SELECT COUNT(*) FROM records
+   WHERE user_id = '<clayton>'
+     AND tags @> ARRAY['agent:coach', 'onboarding'];
+   ```
+   returns exactly 8, not 16.
+
+5. **Mobile:** resize viewport below 1024px — artifact becomes a 60px
+   sticky peek, tap opens full-screen overlay with close button.
+
+6. **Kitchen Steward / Signal Keeper** (needs `BRAVE_API_KEY` set):
+   run each from Cortex; verify real URLs + artifact render + a
+   corresponding `model_calls` row.
+
+7. **Maintenance manual trigger:**
+   ```
+   curl -X POST $APP_URL/api/maintenance/run \
+     -H "x-maintenance-secret: $MAINTENANCE_SECRET"
+   ```
+   Expect `{ ok: true, users: N, results: [...] }` and a
+   `maintenance_runs` row per user.
+
+8. **Kelsey:** sign in, hit the strict gate, complete onboarding, run
+   one agent successfully.
 
 ## Session 3 — v1.3 fixes + v2 foundation (shipped)
 
