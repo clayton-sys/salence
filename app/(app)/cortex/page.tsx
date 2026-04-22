@@ -20,7 +20,7 @@ interface Run {
 }
 
 export default function CortexPage() {
-  const { userId, profile } = useProfile()
+  const { userId, profile, refreshProfile } = useProfile()
   const router = useRouter()
   const [profiles, setProfiles] = useState<Record<string, AgentProfile>>({})
   const [runs, setRuns] = useState<Run[]>([])
@@ -189,6 +189,7 @@ export default function CortexPage() {
           onClose={() => setOnboarding(null)}
           onDone={() => {
             setOnboarding(null)
+            refreshProfile()
             router.refresh()
             loadProfiles()
           }}

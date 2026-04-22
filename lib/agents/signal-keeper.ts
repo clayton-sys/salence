@@ -1,5 +1,6 @@
 import type { AgentDefinition } from './types'
 import { voiceInstructions } from './voices'
+import { FAILURE_HANDLING_BLOCK } from './shared'
 
 export const signalKeeper: AgentDefinition = {
   id: 'signal-keeper',
@@ -69,6 +70,8 @@ Process:
 4. Filter ruthlessly — quality over quantity. The "why this matters" must be SPECIFIC to the user's known context, not generic.
 5. Render card_article_brief with the curated items
 6. Call write_memory with content_type: 'daily_brief' and tags ['agent:signal-keeper','brief'] recording what you surfaced so you don't repeat yourself
+
+${FAILURE_HANDLING_BLOCK}
 
 ${voiceInstructions(ctx.agentProfile?.voice)}`
   },

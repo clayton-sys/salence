@@ -18,6 +18,16 @@ interface LogBody {
   }>
 }
 
+function isLoggedSet(s: { weight?: string; reps?: string }): boolean {
+  const w = (s.weight || '').toString().trim()
+  const r = (s.reps || '').toString().trim()
+  // A set counts as logged if the user entered any weight or reps.
+  // Empty or "0" both mean "didn't do it".
+  if (!w && !r) return false
+  if ((w === '0' || w === '') && (r === '0' || r === '')) return false
+  return true
+}
+
 export async function POST(req: Request) {
   let body: LogBody
   try {
@@ -33,20 +43,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
-  // Flatten to a short content line for recency search, keep full structured_data.
-  const topLine = body.exercises
-    .map((e) => `${e.name}: ${e.sets.filter((s) => s.weight || s.reps).length || 0} sets`)
+  // Filter out exercises with zero logged sets entirely — the user
+  // didn't actually do them.
+  const loggedExercises = (body.exercises || [])
+    .map((e) => ({
+      ...e,
+      sets: (e.sets || []).filter(isLoggedSet),
+    }))
+    .filter((e) => e.sets.length > 0)
+
+  const topLine = loggedExercises
+    .map((e) => `${e.name}: ${e.sets.length} sets`)
     .join('; ')
-  const content = `Workout ${body.date}${body.focus ? ' — ' + body.focus : ''}. ${topLine}`
+  const content = `Workout ${body.date}${body.focus ? ' — ' + body.focus : ''}. ${
+    topLine || 'no sets logged'
+  }`
 
   const { data, error } = await supabase
     .from('records')
     .insert({
       user_id: user.id,
       content,
-      content_type: 'fact',
+      content_type: 'workout_session',
       domain: 'health',
-      tags: ['agent:coach', 'workout_session'],
+      tags: ['agent:coach'],
       source: 'agent',
       weight: 0.8,
       status: 'active',
@@ -54,8 +74,10 @@ export async function POST(req: Request) {
       expires_hint: null,
       life_stage: null,
       structured_data: {
-        content_subtype: 'workout_session',
-        ...body,
+        date: body.date,
+        title: body.title,
+        focus: body.focus,
+        exercises: loggedExercises,
       },
     })
     .select('id')

@@ -1,5 +1,6 @@
 import type { AgentDefinition } from '../types'
 import { voiceInstructions } from '../voices'
+import { FAILURE_HANDLING_BLOCK } from '../shared'
 import { exerciseSummary } from './exercises'
 
 export const coach: AgentDefinition = {
@@ -97,7 +98,7 @@ export const coach: AgentDefinition = {
 Your job: generate today's workout based on their goal, equipment, experience, recent sessions, and any signals from memory (sleep quality, soreness, schedule changes). Progressive overload when earned, deload when signals warrant it.
 
 Process:
-1. Call read_memory (tag: "agent:coach") for goal, equipment, days/week, session length, experience, injuries, recent workout_session records (last 4 weeks)
+1. Call read_memory (tag: "agent:coach") for goal, equipment, days/week, session length, experience, injuries. Separately call read_memory (content_type: "workout_session") to load recent session logs from the last 4 weeks.
 2. Decide today's focus based on what they've done recently and their split
 3. Generate the workout — USE ONLY exercises from the library below that match their equipment
 4. Apply progressive overload: if they hit target on their last session for an exercise, increment appropriately (2-5 lb isolation, 5-10 lb compounds; bodyweight progresses via reps)
@@ -108,6 +109,8 @@ Weekly review mode: if the user asks for a weekly review, review last 7 days fro
 
 Exercise library (use ONLY these):
 ${exerciseSummary()}
+
+${FAILURE_HANDLING_BLOCK}
 
 ${voiceInstructions(ctx.agentProfile?.voice)}`
   },

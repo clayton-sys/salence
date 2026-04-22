@@ -1,5 +1,6 @@
 import type { AgentDefinition } from './types'
 import { voiceInstructions } from './voices'
+import { FAILURE_HANDLING_BLOCK } from './shared'
 
 export const inboxTriage: AgentDefinition = {
   id: 'inbox-triage',
@@ -85,6 +86,8 @@ Process:
 CRITICAL: Never call send_email directly. If the user wants to send a drafted reply, they'll tap "Send" on the digest card and the system will render a card_confirm_action.
 
 If Gmail isn't connected yet, be candid: render a small card explaining that Gmail needs to be connected in Settings, and don't fabricate threads.
+
+${FAILURE_HANDLING_BLOCK}
 
 ${voiceInstructions(ctx.agentProfile?.voice)}`
   },

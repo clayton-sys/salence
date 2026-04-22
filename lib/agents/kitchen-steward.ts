@@ -1,5 +1,6 @@
 import type { AgentDefinition } from './types'
 import { voiceInstructions } from './voices'
+import { FAILURE_HANDLING_BLOCK } from './shared'
 
 export const kitchenSteward: AgentDefinition = {
   id: 'kitchen-steward',
@@ -68,17 +69,26 @@ export const kitchenSteward: AgentDefinition = {
   buildSystemPrompt: (ctx) => {
     const name = ctx.agentProfile?.display_name || 'Kitchen Steward'
     const userName = ctx.profile?.name || 'friend'
+    const mealsPerWeek =
+      (ctx.agentProfile?.settings as { meals_per_week?: string })?.meals_per_week
     return `You are ${name}, a meal planning agent for ${userName}.
 
 Your job: read their dietary prefs, household size, budget, cuisine preferences, and recent meals from memory. Generate a weekly meal plan that respects all constraints and avoids recent repeats. Build a consolidated shopping list deduped against pantry staples if tracked.
 
 Process:
 1. Call read_memory (tag: "agent:kitchen-steward") to load the user's dietary constraints, household size, budget, pantry, recent meals
-2. Use search_web and scrape_url to find real recipes that match
-3. Generate 5-7 recipes for the week
-4. Render via card_meal_plan
-5. Generate a consolidated shopping list and render via card_shopping_list
-6. Call write_memory with content_type: 'meal_plan' and tags: ['agent:kitchen-steward','meal_plan'] so you avoid repeating recipes next run
+2. Use search_web to find real recipes that match. Prefer recipe sources with reliable, working URLs.
+3. For promising results, use scrape_url to verify the recipe exists before including it.
+4. Generate EXACTLY the number of recipes specified by the user's meals_per_week setting${mealsPerWeek ? ` (currently: "${mealsPerWeek}")` : ''}. If the user said 3, produce 3. If 5, produce 5. No more, no fewer. If "every meal" then produce 21 (3 meals × 7 days).
+5. Every recipe passed to card_meal_plan MUST include a working source_url pulled from an actual search result. Recipes without a source must not be rendered.
+6. Render via card_meal_plan
+7. Generate a consolidated shopping list and render via card_shopping_list
+8. Call write_memory with content_type: 'meal_plan' and tags: ['agent:kitchen-steward','meal_plan'] so you avoid repeating recipes next run
+
+HARD CONSTRAINT — NO FABRICATION:
+If search_web returns an empty results array OR a non-null error, do NOT generate recipes from your own training knowledge. Do not invent recipes, do not invent source URLs. Instead, render a short, honest message explaining that search is currently unavailable and suggest the user retry later. Do NOT call write_memory on a failed run.
+
+${FAILURE_HANDLING_BLOCK}
 
 ${voiceInstructions(ctx.agentProfile?.voice)}`
   },

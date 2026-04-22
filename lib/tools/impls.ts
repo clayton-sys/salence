@@ -3,6 +3,7 @@
 // Executor stringifies the result for the tool_result block.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { search_web as searchWeb } from './search'
 
 export interface ToolContext {
   userId: string
@@ -84,46 +85,20 @@ export async function delete_memory_record(
 
 // ────── web ─────────────────────────────────────────────────
 
-interface SearchResult {
-  title: string
-  url: string
-  snippet: string
-}
-
 export async function search_web(
   _ctx: ToolContext,
-  input: { query: string; max_results?: number }
-) {
-  // DuckDuckGo Instant Answer isn't great for general queries, but the
-  // HTML endpoint at duckduckgo.com/html/ works without an API key.
-  // For production, swap in a Brave / Serper / Tavily key.
-  try {
-    const res = await fetch(
-      `https://duckduckgo.com/html/?q=${encodeURIComponent(input.query)}`,
-      {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (compatible; SalenceBot/1.0; +https://salence.app)',
-        },
-      }
-    )
-    const html = await res.text()
-    const results: SearchResult[] = []
-    // Crude regex parse — sufficient for a rough snippet extraction.
-    const re =
-      /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
-    let m: RegExpExecArray | null
-    const max = input.max_results ?? 8
-    while ((m = re.exec(html)) !== null && results.length < max) {
-      const url = decodeURIComponent(m[1].replace(/^\/\/duckduckgo\.com\/l\/\?uddg=/, '').split('&')[0])
-      const title = stripTags(m[2]).trim()
-      const snippet = stripTags(m[3]).trim()
-      if (url && title) results.push({ title, url, snippet })
-    }
-    return { results }
-  } catch (err) {
-    return { error: (err as Error).message }
+  input: {
+    query: string
+    max_results?: number
+    recency?: 'day' | 'week' | 'month' | 'year' | null
   }
+) {
+  const { results, error } = await searchWeb({
+    query: input.query,
+    max_results: input.max_results,
+    recency: input.recency,
+  })
+  return { results, error }
 }
 
 export async function scrape_url(

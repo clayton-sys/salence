@@ -6,6 +6,11 @@ export type ContentType =
   | 'family'
   | 'work'
   | 'question'
+  | 'note'
+  | 'workout_session'
+  | 'meal_plan'
+  | 'daily_brief'
+  | 'email_digest'
 
 export type Domain =
   | 'personal'

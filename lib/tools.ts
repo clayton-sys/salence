@@ -19,12 +19,17 @@ export const TOOLS: Record<string, ToolMeta> = {
     definition: {
       name: 'search_web',
       description:
-        'Search the web for current information. Returns a list of search results with title, url, and snippet.',
+        'Search the web for current information. Returns { results: [{title, url, snippet, published_date}], error }. If error is non-null or results is empty, do NOT fabricate — fail honestly.',
       input_schema: {
         type: 'object',
         properties: {
           query: { type: 'string' },
-          max_results: { type: 'number', default: 8 },
+          max_results: { type: 'number', default: 10 },
+          recency: {
+            type: 'string',
+            enum: ['day', 'week', 'month', 'year'],
+            description: 'Optional freshness filter for time-sensitive queries',
+          },
         },
         required: ['query'],
       },
