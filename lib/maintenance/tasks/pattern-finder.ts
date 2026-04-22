@@ -185,7 +185,7 @@ Or return the literal null if this pattern is too weak to justify an agent.`
         systemPrompt:
           'You are a pattern articulator. Be specific, concrete, and avoid generic output.',
         userMessage: prompt,
-        logContext: { supabase, userId, agentId: 'maintenance:pattern-finder' },
+        logContext: { userId, agentId: 'maintenance:pattern-finder' },
       })
 
       let art: Articulated | null

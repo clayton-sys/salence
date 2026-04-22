@@ -80,7 +80,7 @@ Return ONLY a JSON array, one object per record in the input order:
 
 Only assign a custom context when you're highly confident it fits. If the record does not clearly belong to any non-default context (personal/work/health/family), omit it from the output — do not guess.`,
         userMessage: inputList,
-        logContext: { supabase, userId, agentId: 'maintenance:tagger' },
+        logContext: { userId, agentId: 'maintenance:tagger' },
       })
 
       let parsed: TagOutput[] = []

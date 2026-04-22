@@ -110,7 +110,7 @@ Never invent an exercise that isn't in the list. Never guess if the user is ambi
     taskType: 'patch',
     systemPrompt,
     userMessage: message,
-    logContext: { supabase, userId, agentId: 'coach' },
+    logContext: { userId, agentId: 'coach' },
   })
 
   let patch: PatchResult | null

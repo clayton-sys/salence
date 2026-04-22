@@ -107,7 +107,6 @@ export async function runAgent(
       tools,
       maxTokens: 4096,
       logContext: {
-        supabase: ctx.supabase,
         userId: ctx.userId,
         agentId: agent.id,
       },

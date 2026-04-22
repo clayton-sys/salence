@@ -1,7 +1,7 @@
 // THE ONLY FILE THAT KNOWS ABOUT AI MODELS
 // Swap provider/model here — nothing else changes.
 
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getServiceSupabase } from '@/lib/supabase-server'
 
 type Provider = 'anthropic' | 'ollama' | 'openai'
 export type ModelTier = 'haiku' | 'sonnet'
@@ -152,7 +152,6 @@ export interface ModelResponse {
 }
 
 export interface LogContext {
-  supabase: SupabaseClient
   userId: string
   agentId?: string | null
   escalatedFrom?: ModelTier | null
@@ -180,6 +179,8 @@ function estimateCost(
 }
 
 // Fire-and-forget — logging failures must not break model calls.
+// Uses the service-role client so RLS doesn't block server-side cost tracking.
+// Errors are logged to console.error so Vercel logs surface them.
 async function logModelCall(
   log: LogContext | undefined,
   intent: TaskType,
@@ -189,7 +190,8 @@ async function logModelCall(
 ): Promise<void> {
   if (!log) return
   try {
-    await log.supabase.from('model_calls').insert({
+    const svc = getServiceSupabase()
+    const { error } = await svc.from('model_calls').insert({
       user_id: log.userId,
       intent,
       model,
@@ -200,8 +202,21 @@ async function logModelCall(
       escalated_from: log.escalatedFrom ?? null,
       agent_id: log.agentId ?? null,
     })
-  } catch {
-    /* non-blocking */
+    if (error) {
+      console.error('[model_calls] insert failed:', error.message, {
+        intent,
+        tier,
+        model,
+        userId: log.userId,
+      })
+    }
+  } catch (err) {
+    console.error('[model_calls] logging threw:', (err as Error).message, {
+      intent,
+      tier,
+      model,
+      userId: log.userId,
+    })
   }
 }
 

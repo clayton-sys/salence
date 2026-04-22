@@ -161,7 +161,7 @@ Notes: when the user asks to "show my notes", "show notes about X", or similar, 
       messages,
       tools: CARD_TOOLS,
       maxTokens: 4096,
-      logContext: { supabase, userId: user.id, agentId: 'chat' },
+      logContext: { userId: user.id, agentId: 'chat' },
     })
 
     // Return the raw content blocks so the client renderer can mount cards.
