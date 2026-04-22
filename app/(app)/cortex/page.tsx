@@ -20,11 +20,22 @@ interface Run {
   result: Record<string, unknown>
 }
 
+interface Suggestion {
+  id: string
+  kind: string
+  title: string
+  description: string
+  why_this_matters: string | null
+  proposed_config: Record<string, unknown> | null
+  status: string
+}
+
 export default function CortexPage() {
   const { userId, profile, refreshProfile } = useProfile()
   const router = useRouter()
   const [profiles, setProfiles] = useState<Record<string, AgentProfile>>({})
   const [runs, setRuns] = useState<Run[]>([])
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [onboarding, setOnboarding] = useState<string | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -39,6 +50,25 @@ export default function CortexPage() {
     for (const p of data || []) map[p.agent_id] = p as AgentProfile
     setProfiles(map)
   }, [userId])
+
+  const loadSuggestions = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase
+      .from('suggestions')
+      .select('id, kind, title, description, why_this_matters, proposed_config, status')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    setSuggestions((data as Suggestion[]) || [])
+  }, [userId])
+
+  async function resolveSuggestion(id: string, status: 'accepted' | 'dismissed') {
+    await supabase
+      .from('suggestions')
+      .update({ status, resolved_at: new Date().toISOString() })
+      .eq('id', id)
+    loadSuggestions()
+  }
 
   const loadRuns = useCallback(async () => {
     if (!userId) return
@@ -60,8 +90,9 @@ export default function CortexPage() {
     /* eslint-disable react-hooks/set-state-in-effect */
     loadProfiles()
     loadRuns()
+    loadSuggestions()
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [userId, loadProfiles, loadRuns])
+  }, [userId, loadProfiles, loadRuns, loadSuggestions])
 
   function isOnboarded(id: string): boolean {
     if (!profile) return false
@@ -97,6 +128,43 @@ export default function CortexPage() {
         <h1>Cortex</h1>
         <p className="cortex-sub">Your agents</p>
       </header>
+
+      {suggestions.length > 0 && (
+        <section className="cortex-suggestions">
+          <h2>Suggested for you</h2>
+          <p className="cortex-muted">
+            Patterns I noticed in your recent activity. Each is a lightweight
+            agent you might want.
+          </p>
+          <div className="cortex-suggestion-grid">
+            {suggestions.map((s) => (
+              <article key={s.id} className="cortex-suggestion-card">
+                <h3>{s.title}</h3>
+                <p>{s.description}</p>
+                {s.why_this_matters && (
+                  <p className="cortex-muted">
+                    <strong>Why:</strong> {s.why_this_matters}
+                  </p>
+                )}
+                <div className="cortex-suggestion-actions">
+                  <button
+                    className="card-primary"
+                    onClick={() => resolveSuggestion(s.id, 'accepted')}
+                  >
+                    Try it
+                  </button>
+                  <button
+                    className="card-ghost"
+                    onClick={() => resolveSuggestion(s.id, 'dismissed')}
+                  >
+                    Not interested
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="cortex-grid">
         {AGENT_LIST.map((agent) => {
