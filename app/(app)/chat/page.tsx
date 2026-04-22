@@ -263,6 +263,36 @@ export default function ChatPage() {
 
     const effectiveDomain = activeContextSlug || activeDomain
 
+    // Chat-native quick-add: "save note: ..." skips the extractor round-trip
+    // and writes a note record immediately. Return fast with an ack bubble.
+    const noteMatch = /^\s*(?:save\s+note|note)\s*[:\-–]\s*(.+)$/i.exec(text)
+    if (noteMatch) {
+      const body = noteMatch[1].trim()
+      await saveRecord(
+        makeRecord({
+          content: body,
+          contentType: 'note',
+          domain: effectiveDomain,
+          tags: activeContextSlug ? ['note', activeContextSlug] : ['note'],
+          source: 'chat',
+          userId,
+        })
+      )
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Saved to notes${
+            activeContextSlug ? ` (${activeContextSlug})` : ''
+          }. Open them at [Notes](/notes).`,
+          ts: Date.now(),
+        },
+      ])
+      refreshMemoryCount()
+      setThinking(false)
+      return
+    }
+
     await saveRecord(
       makeRecord({
         content: text,

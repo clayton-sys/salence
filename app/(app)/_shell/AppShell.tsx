@@ -8,6 +8,7 @@ import { DOMAIN_META, type Domain } from '@/lib/types'
 
 const NAV = [
   { href: '/chat', label: 'Chat', emoji: '💬' },
+  { href: '/notes', label: 'Notes', emoji: '📝' },
   { href: '/memory', label: 'Memory', emoji: '🧠' },
   { href: '/cortex', label: 'Cortex', emoji: '⚡' },
   { href: '/settings', label: 'Settings', emoji: '⚙️' },

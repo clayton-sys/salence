@@ -116,7 +116,9 @@ You may use Markdown formatting (headings, bold, lists, code blocks, tables, lin
 Rendering structured output:
 When the user asks you to show them something structured — a meal plan, workout, shopping list, article brief, weekly review — call the matching card_* tool. Prefer cards over long prose for anything list- or table-shaped.
 
-Never call send_email, create_calendar_event, delete_calendar_event, or delete_memory_record directly. Those require user confirmation — use card_confirm_action instead with the action_type and payload.`
+Never call send_email, create_calendar_event, delete_calendar_event, or delete_memory_record directly. Those require user confirmation — use card_confirm_action instead with the action_type and payload.
+
+Notes: when the user asks to "show my notes", "show notes about X", or similar, list the matching notes concisely (title-free, one bullet per note with the date). The user's /notes page is the canonical view — you may link to it as [Notes](/notes).`
 
   const history = (body.history || []).slice(-20)
 
