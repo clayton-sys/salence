@@ -1,7 +1,7 @@
 // THE ONLY FILE THAT KNOWS ABOUT AI MODELS
 // Swap provider/model here — nothing else changes.
 
-import { getServiceSupabase } from '@/lib/supabase-server'
+import { getServiceSupabase } from '@/lib/supabase-service'
 
 type Provider = 'anthropic' | 'ollama' | 'openai'
 export type ModelTier = 'haiku' | 'sonnet'

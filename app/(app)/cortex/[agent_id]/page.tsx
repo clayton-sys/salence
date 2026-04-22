@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useProfile } from '@/lib/profile-context'
 import { AGENTS } from '@/lib/agents/registry'
 import { ChatMessage } from '@/components/chat/ChatMessage'
+import { WorkoutSessionCard } from '@/components/cards/WorkoutSessionCard'
 import type { AssistantContentBlock, MemoryRecord } from '@/lib/types'
 
 interface AgentRunRow {
@@ -21,10 +22,38 @@ interface AgentRunRow {
 }
 
 interface ChatEntry {
+  id: string
   role: 'user' | 'assistant'
   content: string | AssistantContentBlock[]
   ts: number
   note?: string
+}
+
+interface FlashTarget {
+  exerciseIndex: number
+  setIndex: number
+  at: number
+}
+
+interface WorkoutStructured {
+  date?: string
+  title?: string
+  focus?: string
+  exercises?: Array<{
+    name: string
+    sets: Array<{ weight: string; reps: string; rpe: string }>
+    target_sets?: number
+    target_reps?: string
+    target_weight?: string
+    notes?: string
+  }>
+}
+
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export default function AgentWorkspace({
@@ -44,8 +73,11 @@ export default function AgentWorkspace({
   const [busy, setBusy] = useState(false)
   const [running, setRunning] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [mobileTab, setMobileTab] = useState<'chat' | 'artifact'>('artifact')
+  const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false)
+  const [flashTarget, setFlashTarget] = useState<FlashTarget | null>(null)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const chatListRef = useRef<HTMLDivElement | null>(null)
+  const busyRef = useRef(false)
 
   const loadRuns = useCallback(async () => {
     if (!userId) return
@@ -59,7 +91,10 @@ export default function AgentWorkspace({
       .limit(20)
     const rows = (data as AgentRunRow[]) || []
     setRuns(rows)
-    if (rows[0]) setCurrent(rows[0])
+    if (rows[0]) {
+      setCurrent(rows[0])
+      setLastUpdatedAt(new Date(rows[0].ran_at).getTime())
+    }
   }, [userId, agent_id])
 
   const loadLatestSession = useCallback(async () => {
@@ -73,7 +108,11 @@ export default function AgentWorkspace({
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    setLatestSession((data as MemoryRecord) || null)
+    const rec = (data as MemoryRecord) || null
+    setLatestSession(rec)
+    if (rec) {
+      setLastUpdatedAt(new Date(rec.created_at).getTime())
+    }
   }, [userId, agent_id])
 
   useEffect(() => {
@@ -110,12 +149,13 @@ export default function AgentWorkspace({
         body: JSON.stringify({}),
       })
       const data = await res.json()
-      if (res.ok && data.content) {
+      if (res.ok && (data.summary || data.content)) {
         setChat((prev) => [
           ...prev,
           {
+            id: newId(),
             role: 'assistant',
-            content: data.content,
+            content: data.summary || 'Run complete — see artifact.',
             ts: Date.now(),
             note: 'fresh run',
           },
@@ -130,11 +170,12 @@ export default function AgentWorkspace({
 
   async function sendChat() {
     const text = input.trim()
-    if (!text || busy) return
+    if (!text || busyRef.current) return
+    busyRef.current = true
     setInput('')
     setChat((prev) => [
       ...prev,
-      { role: 'user', content: text, ts: Date.now() },
+      { id: newId(), role: 'user', content: text, ts: Date.now() },
     ])
     setBusy(true)
     try {
@@ -153,6 +194,7 @@ export default function AgentWorkspace({
         setChat((prev) => [
           ...prev,
           {
+            id: newId(),
             role: 'assistant',
             content: data.summary || 'Patch applied.',
             ts: Date.now(),
@@ -161,12 +203,26 @@ export default function AgentWorkspace({
         ])
         await loadLatestSession()
         await loadRuns()
+        setLastUpdatedAt(Date.now())
+        if (
+          typeof data.exercise_index === 'number' &&
+          typeof data.set_index === 'number'
+        ) {
+          setFlashTarget({
+            exerciseIndex: data.exercise_index,
+            setIndex: data.set_index,
+            at: Date.now(),
+          })
+        }
       } else {
+        // Non-patch: summary lives in chat, full blocks live in artifact (via
+        // loadRuns → current). This avoids rendering the same content twice.
         setChat((prev) => [
           ...prev,
           {
+            id: newId(),
             role: 'assistant',
-            content: data.content || data.summary || '…',
+            content: data.summary || 'Run complete — see artifact.',
             ts: Date.now(),
             note: 'full agent run',
           },
@@ -178,56 +234,72 @@ export default function AgentWorkspace({
       setChat((prev) => [
         ...prev,
         {
+          id: newId(),
           role: 'assistant',
           content: `Error: ${(err as Error).message}`,
           ts: Date.now(),
         },
       ])
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
-  const artifactBlocks: AssistantContentBlock[] | null = (() => {
-    if (latestSession && agent_id === 'coach') {
-      // Build a synthetic card_workout_session from the stored record so
-      // the workspace artifact pane is always a live card.
-      const d = latestSession.structured_data as {
-        date?: string
-        title?: string
-        focus?: string
-        exercises?: Array<{
-          name: string
-          sets: Array<{ weight: string; reps: string; rpe: string }>
-          target_sets?: number
-          target_reps?: string
-          target_weight?: string
-          notes?: string
-        }>
-      }
-      return [
-        {
-          type: 'tool_use',
-          id: latestSession.id,
-          name: 'card_workout_session',
-          input: {
-            title: d.title || 'Workout',
-            date: d.date || latestSession.created_at.slice(0, 10),
-            focus: d.focus,
-            exercises: (d.exercises || []).map((e) => ({
-              name: e.name,
-              sets: e.sets.length,
-              reps: e.target_reps || '-',
-              target_weight: e.target_weight,
-              notes: e.notes,
-              logged_sets: e.sets,
-            })),
-          },
-        },
-      ]
-    }
-    return current?.result?.blocks || null
-  })()
+  const workoutStruct: WorkoutStructured | null =
+    latestSession && agent_id === 'coach'
+      ? (latestSession.structured_data as WorkoutStructured)
+      : null
+
+  const nonCoachBlocks: AssistantContentBlock[] | null =
+    agent_id !== 'coach' ? current?.result?.blocks || null : null
+
+  const artifactTitle =
+    agent_id === 'coach'
+      ? workoutStruct?.title || 'Workout'
+      : current?.summary?.slice(0, 60) || agent.default_display_name
+
+  const lastUpdatedLabel =
+    lastUpdatedAt != null ? formatRelative(lastUpdatedAt) : null
+
+  const mobileSummary =
+    agent_id === 'coach'
+      ? workoutStruct?.focus ||
+        (workoutStruct?.exercises?.length
+          ? `${workoutStruct.exercises.length} exercises`
+          : 'No workout yet')
+      : current?.summary?.slice(0, 60) || 'No artifact yet'
+
+  const artifactContent = (
+    <>
+      {agent_id === 'coach' && workoutStruct ? (
+        <WorkoutSessionCard
+          key={latestSession?.id ?? 'no-session'}
+          title={workoutStruct.title || 'Workout'}
+          date={workoutStruct.date || (latestSession?.created_at || '').slice(0, 10)}
+          focus={workoutStruct.focus}
+          exercises={(workoutStruct.exercises || []).map((e) => ({
+            name: e.name,
+            sets: e.sets.length,
+            reps: e.target_reps || '-',
+            target_weight: e.target_weight,
+            notes: e.notes,
+            logged_sets: e.sets,
+          }))}
+          flashTarget={flashTarget}
+        />
+      ) : nonCoachBlocks ? (
+        <ChatMessage role="assistant" content={nonCoachBlocks} />
+      ) : (
+        <div className="workspace-empty">
+          <p>
+            No artifact yet. Tap <strong>Run now</strong> to generate one, or
+            message {displayName} on the left.
+          </p>
+        </div>
+      )}
+    </>
+  )
 
   return (
     <section className="workspace-view">
@@ -257,22 +329,17 @@ export default function AgentWorkspace({
         </div>
       </header>
 
-      <div className="workspace-mobile-tabs">
-        <button
-          className={`chat-context-chip${mobileTab === 'chat' ? ' is-active' : ''}`}
-          onClick={() => setMobileTab('chat')}
-        >
-          Chat
-        </button>
-        <button
-          className={`chat-context-chip${mobileTab === 'artifact' ? ' is-active' : ''}`}
-          onClick={() => setMobileTab('artifact')}
-        >
-          Artifact
-        </button>
-      </div>
+      <button
+        type="button"
+        className="workspace-mobile-peek"
+        onClick={() => setMobileArtifactOpen(true)}
+        aria-label="Open artifact"
+      >
+        <span className="workspace-mobile-peek-title">{artifactTitle}</span>
+        <span className="workspace-mobile-peek-sub">{mobileSummary}</span>
+      </button>
 
-      <div className={`workspace-panes mobile-${mobileTab}`}>
+      <div className="workspace-panes">
         <aside className="workspace-chat-pane">
           <div className="workspace-chat-list" ref={chatListRef}>
             {chat.length === 0 && (
@@ -283,8 +350,8 @@ export default function AgentWorkspace({
                 </p>
               </div>
             )}
-            {chat.map((m, i) => (
-              <div key={i} className={`workspace-msg ${m.role}`}>
+            {chat.map((m) => (
+              <div key={m.id} className={`workspace-msg ${m.role}`}>
                 <ChatMessage role={m.role} content={m.content} />
                 {m.note && <span className="workspace-msg-note">{m.note}</span>}
               </div>
@@ -331,18 +398,44 @@ export default function AgentWorkspace({
         </aside>
 
         <section className="workspace-artifact-pane">
-          {artifactBlocks ? (
-            <ChatMessage role="assistant" content={artifactBlocks} />
-          ) : (
-            <div className="workspace-empty">
-              <p>
-                No artifact yet. Tap <strong>Run now</strong> to generate one,
-                or message {displayName} on the left.
-              </p>
-            </div>
-          )}
+          <header className="workspace-artifact-header">
+            <h2 className="workspace-artifact-title">{artifactTitle}</h2>
+            {lastUpdatedLabel && (
+              <span className="workspace-artifact-stamp">
+                Last updated {lastUpdatedLabel}
+              </span>
+            )}
+          </header>
+          <div className="workspace-artifact-body">{artifactContent}</div>
         </section>
       </div>
+
+      {mobileArtifactOpen && (
+        <div
+          className="workspace-mobile-overlay"
+          role="dialog"
+          aria-label="Artifact"
+        >
+          <header className="workspace-artifact-header">
+            <div>
+              <h2 className="workspace-artifact-title">{artifactTitle}</h2>
+              {lastUpdatedLabel && (
+                <span className="workspace-artifact-stamp">
+                  Last updated {lastUpdatedLabel}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="card-ghost"
+              onClick={() => setMobileArtifactOpen(false)}
+            >
+              Close
+            </button>
+          </header>
+          <div className="workspace-artifact-body">{artifactContent}</div>
+        </div>
+      )}
 
       {historyOpen && (
         <div className="workspace-history">
@@ -385,4 +478,19 @@ export default function AgentWorkspace({
         !profile?.inbox_onboarded_at && null}
     </section>
   )
+}
+
+function formatRelative(ts: number): string {
+  const diff = Date.now() - ts
+  if (diff < 0) return 'just now'
+  const s = Math.floor(diff / 1000)
+  if (s < 10) return 'just now'
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
+  return new Date(ts).toLocaleDateString()
 }

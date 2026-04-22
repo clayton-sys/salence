@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServiceSupabase } from '@/lib/supabase-server'
+import { getServiceSupabase } from '@/lib/supabase-service'
 import { runTasksForUser } from '@/lib/maintenance/runner'
 
 export const runtime = 'nodejs'

@@ -57,6 +57,8 @@ async function tryCoachPatch(
       summary: string
       tier: 'haiku' | 'sonnet'
       record_id: string
+      exercise_index: number
+      set_index: number
     }
   | null
 > {
@@ -152,6 +154,8 @@ Never invent an exercise that isn't in the list. Never guess if the user is ambi
     kind: 'patch',
     tier: 'haiku',
     record_id: session.id,
+    exercise_index: idx,
+    set_index: setIndex,
     summary: `Logged ${ex.name} set ${setIndex + 1}: ${patch.weight || ''} × ${patch.reps || ''}${
       patch.rpe ? ` @ RPE ${patch.rpe}` : ''
     }`.trim(),
