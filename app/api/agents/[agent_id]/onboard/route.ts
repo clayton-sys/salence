@@ -71,6 +71,26 @@ export async function POST(
       .eq('id', user.id)
   }
 
+  // Re-onboarding should replace, not layer. Hard-delete any prior
+  // onboarding records for this agent before inserting the new set so
+  // stale answers don't accumulate and confuse the agent on read_memory.
+  const { data: deleted, error: delErr } = await supabase
+    .from('records')
+    .delete()
+    .eq('user_id', user.id)
+    .contains('tags', [`agent:${agent.id}`, 'onboarding'])
+    .select('id')
+  if (delErr) {
+    console.error(
+      `[onboard:${agent.id}] failed to clear prior onboarding records:`,
+      delErr.message
+    )
+  } else if (deleted && deleted.length > 0) {
+    console.log(
+      `[onboard:${agent.id}] cleared ${deleted.length} prior onboarding records`
+    )
+  }
+
   // Persist each answer as a memory record tagged for this agent, so the
   // agent can read_memory and pick them up on first run.
   const rows = Object.entries(answers)
