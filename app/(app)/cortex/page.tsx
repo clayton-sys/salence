@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useProfile } from '@/lib/profile-context'
@@ -141,13 +142,19 @@ export default function CortexPage() {
                   </button>
                 ) : (
                   <>
+                    <Link
+                      href={`/cortex/${agent.id}`}
+                      className={`card-primary${!enabled ? ' is-disabled' : ''}`}
+                    >
+                      Open workspace
+                    </Link>
                     <button
                       type="button"
-                      className="card-primary"
+                      className="card-ghost"
                       disabled={!enabled || running === agent.id}
                       onClick={() => setRunning(agent.id)}
                     >
-                      {running === agent.id ? 'Running…' : 'Run now'}
+                      {running === agent.id ? 'Running…' : 'Quick run'}
                     </button>
                     <button
                       type="button"

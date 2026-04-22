@@ -59,7 +59,10 @@ export async function POST(
     await supabase
       .from('agent_runs')
       .update({
-        result: { tool_calls: result.tool_calls },
+        result: {
+          tool_calls: result.tool_calls,
+          blocks: result.content,
+        },
         status: 'completed',
         summary: result.summary,
       })
