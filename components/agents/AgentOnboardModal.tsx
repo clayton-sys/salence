@@ -93,7 +93,12 @@ export function AgentOnboardModal({ agentId, onClose, onDone }: Props) {
     (answers.display_name as string) || agent.default_display_name
 
   return (
-    <div className="modal-backdrop" onClick={success ? undefined : onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !success) onClose()
+      }}
+    >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>
