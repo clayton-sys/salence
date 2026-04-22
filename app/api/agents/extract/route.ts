@@ -8,6 +8,7 @@ export const runtime = 'nodejs'
 interface ExtractBody {
   message: string
   domain: Domain
+  context_slug?: string | null
 }
 
 export async function POST(req: Request) {
@@ -46,13 +47,15 @@ export async function POST(req: Request) {
       facts = []
     }
 
+    const effectiveDomain = (body.context_slug || body.domain) as string
+
     for (const f of facts) {
       if (!f.fact) continue
       await supabase.from('records').insert({
         user_id: user.id,
         content: f.fact,
         content_type: (f.contentType as ContentType) || 'fact',
-        domain: body.domain,
+        domain: effectiveDomain,
         tags: Array.isArray(f.tags) ? f.tags : [],
         source: 'agent',
         weight: 0.5,

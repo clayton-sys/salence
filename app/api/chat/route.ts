@@ -20,6 +20,7 @@ interface Attachment {
 interface ChatBody {
   message: string
   domain: Domain
+  context_slug?: string | null
   assistantName: string
   userName: string
   history: { role: 'user' | 'assistant'; content: string }[]
@@ -49,30 +50,44 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
-  const [{ data: domainRows }, { data: recentRows }] = await Promise.all([
-    supabase
-      .from('records')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('domain', body.domain)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(6),
-    supabase
-      .from('records')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(6),
-  ])
+  // When a context is active, scope the memory read to it. Otherwise
+  // read the user's current domain + global recency.
+  const scopedSlug = body.context_slug || null
 
+  const queries = scopedSlug
+    ? [
+        supabase
+          .from('records')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('domain', scopedSlug)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(10),
+      ]
+    : [
+        supabase
+          .from('records')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('domain', body.domain)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(6),
+        supabase
+          .from('records')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(6),
+      ]
+
+  const results = await Promise.all(queries)
+  const allRows = results.flatMap((r) => r.data || [])
   const combined = [
     ...new Map(
-      [...(domainRows || []), ...(recentRows || [])].map((r: MemoryRecord) => [
-        r.id,
-        r,
-      ])
+      allRows.map((r: MemoryRecord) => [r.id, r])
     ).values(),
   ].slice(0, 10)
 
@@ -80,11 +95,13 @@ export async function POST(req: Request) {
     .map((r) => `- [${r.content_type}] ${r.content}`)
     .join('\n')
 
+  const contextLabel = scopedSlug || body.domain
+
   const systemPrompt = `You are ${body.assistantName}, a warm and intelligent personal AI assistant.
 You remember things about this person and use that knowledge naturally — like a trusted friend who actually pays attention.
 
 User's name: ${body.userName}
-Current context: ${body.domain}
+Current context: ${contextLabel}${scopedSlug ? ' (scoped — only memory from this context is visible)' : ''}
 
 What you know about this person:
 ${contextLines || '(nothing yet — this is your first exchange)'}

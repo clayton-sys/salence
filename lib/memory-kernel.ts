@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { MemoryRecord, ContentType, Domain } from './types'
+import { MemoryRecord, ContentType } from './types'
 
 // `vector` is intentionally omitted in v1 — the column is pgvector-typed and
 // rejects empty arrays ("vector must have at least 1 dimension"). It will be
@@ -12,7 +12,7 @@ export type NewRecord = Omit<
 export function makeRecord(params: {
   content: string
   contentType?: ContentType
-  domain?: Domain
+  domain?: string
   tags?: string[]
   source?: string
   userId: string
@@ -100,7 +100,7 @@ export async function getRecentRecords(
 
 export async function getRecordsByDomain(
   userId: string,
-  domain: Domain,
+  domain: string,
   limit = 10
 ): Promise<MemoryRecord[]> {
   try {
@@ -125,7 +125,7 @@ export async function getRecordsByDomain(
 
 export async function getContextForChat(
   userId: string,
-  domain: Domain
+  domain: string
 ): Promise<MemoryRecord[]> {
   // v1: recency-based retrieval
   // v2: replace with pgvector similarity search

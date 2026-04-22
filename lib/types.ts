@@ -28,7 +28,11 @@ export interface MemoryRecord {
   user_id: string
   content: string
   content_type: ContentType
-  domain: Domain
+  /**
+   * Arbitrary context slug. Stored as TEXT in records.domain so that
+   * user-defined contexts (not just the hard-coded Domain union) work.
+   */
+  domain: string
   tags: string[]
   source: string
   vector: number[]

@@ -1202,6 +1202,72 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-dim);
 }
 .settings-muted { color: var(--text-muted); font-size: 13px; }
+
+.settings-context-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-context-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-wrap: wrap;
+}
+.settings-context-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+.settings-context-label { font-weight: 500; }
+.settings-color-input {
+  width: 32px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.chat-context-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 12px 0;
+  align-items: center;
+}
+.chat-context-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  cursor: pointer;
+}
+.chat-context-chip.is-active {
+  color: var(--user-color);
+  border-color: var(--user-color-border);
+  background: var(--user-color-dim);
+}
+.chat-context-chip .chat-context-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
 .settings-tier {
   background: var(--bg-card);
   border: 1px solid var(--border);

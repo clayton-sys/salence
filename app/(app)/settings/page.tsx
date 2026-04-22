@@ -7,6 +7,7 @@ import { upsertProfile } from '@/lib/profile'
 import { THEME_SEEDS } from '@/lib/theme'
 import { MODEL_CONFIG } from '@/lib/model-router'
 import { ALL_DOMAINS, DOMAIN_META, type Domain } from '@/lib/types'
+import { ContextsSection } from '@/components/settings/ContextsSection'
 
 export default function SettingsPage() {
   const { profile, userId, refreshProfile } = useProfile()
@@ -149,6 +150,8 @@ export default function SettingsPage() {
           <p className="settings-flash-inline">✓ Saved</p>
         )}
       </section>
+
+      <ContextsSection />
 
       <section className="settings-section">
         <h2>Model routing</h2>

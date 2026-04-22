@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react'
 import { supabase } from './supabase'
+import { fetchContexts, type UserContext } from './contexts'
 import type { UserProfile, Domain } from './types'
 
 interface ProfileContextValue {
@@ -16,8 +17,14 @@ interface ProfileContextValue {
   userId: string | null
   loading: boolean
   refreshProfile: () => Promise<void>
+  /** Legacy — kept so older pages still compile. Use activeContextSlug. */
   activeDomain: Domain
   setActiveDomain: (d: Domain) => void
+  /** null means "all contexts" — no filter. */
+  activeContextSlug: string | null
+  setActiveContextSlug: (slug: string | null) => void
+  contexts: UserContext[]
+  refreshContexts: () => Promise<void>
   memoryCount: number
   refreshMemoryCount: () => Promise<void>
 }
@@ -29,6 +36,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeDomain, setActiveDomain] = useState<Domain>('personal')
+  const [activeContextSlug, setActiveContextSlug] = useState<string | null>(null)
+  const [contexts, setContexts] = useState<UserContext[]>([])
   const [memoryCount, setMemoryCount] = useState(0)
 
   const refreshMemoryCount = useCallback(async () => {
@@ -39,6 +48,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       .eq('user_id', userId)
       .eq('status', 'active')
     setMemoryCount(count || 0)
+  }, [userId])
+
+  const refreshContexts = useCallback(async () => {
+    if (!userId) return
+    const rows = await fetchContexts(userId)
+    setContexts(rows)
   }, [userId])
 
   const refreshProfile = useCallback(async () => {
@@ -72,7 +87,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshMemoryCount()
-  }, [refreshMemoryCount, activeDomain])
+    refreshContexts()
+  }, [refreshMemoryCount, refreshContexts, activeDomain])
 
   const value = useMemo<ProfileContextValue>(
     () => ({
@@ -82,6 +98,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       activeDomain,
       setActiveDomain,
+      activeContextSlug,
+      setActiveContextSlug,
+      contexts,
+      refreshContexts,
       memoryCount,
       refreshMemoryCount,
     }),
@@ -91,6 +111,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       loading,
       refreshProfile,
       activeDomain,
+      activeContextSlug,
+      contexts,
+      refreshContexts,
       memoryCount,
       refreshMemoryCount,
     ]

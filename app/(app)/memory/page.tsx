@@ -97,7 +97,7 @@ export default function MemoryPage() {
 
       <div className="memory-grid">
         {filtered.map((r) => {
-          const meta = DOMAIN_META[r.domain]
+          const meta = DOMAIN_META[r.domain as keyof typeof DOMAIN_META]
           return (
             <article key={r.id} className={`memory-card status-${r.status}`}>
               <div className="memory-card-top">

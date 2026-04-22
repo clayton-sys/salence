@@ -65,7 +65,15 @@ interface PendingAttachment {
 }
 
 export default function ChatPage() {
-  const { profile, userId, activeDomain, refreshMemoryCount } = useProfile()
+  const {
+    profile,
+    userId,
+    activeDomain,
+    activeContextSlug,
+    setActiveContextSlug,
+    contexts,
+    refreshMemoryCount,
+  } = useProfile()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -253,11 +261,13 @@ export default function ChatPage() {
     setAttachError(null)
     setThinking(true)
 
+    const effectiveDomain = activeContextSlug || activeDomain
+
     await saveRecord(
       makeRecord({
         content: text,
         contentType: 'conversation',
-        domain: activeDomain,
+        domain: effectiveDomain,
         tags: sent ? ['user', 'with-attachment'] : ['user'],
         source: 'chat',
         userId,
@@ -270,7 +280,8 @@ export default function ChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: text,
-        domain: activeDomain,
+        domain: effectiveDomain,
+        context_slug: activeContextSlug,
       }),
     }).finally(() => refreshMemoryCount())
 
@@ -280,7 +291,8 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          domain: activeDomain,
+          domain: effectiveDomain,
+          context_slug: activeContextSlug,
           assistantName,
           userName,
           history: next.slice(-20).map((m) => ({
@@ -311,7 +323,7 @@ export default function ChatPage() {
         makeRecord({
           content: replyText,
           contentType: 'conversation',
-          domain: activeDomain,
+          domain: effectiveDomain,
           tags: ['assistant'],
           source: 'chat',
           userId,
@@ -324,7 +336,7 @@ export default function ChatPage() {
           makeRecord({
             content: `User uploaded ${sent.filename} — ${summary}`,
             contentType: 'fact',
-            domain: activeDomain,
+            domain: effectiveDomain,
             tags: ['upload', sent.mediaType],
             source: 'chat',
             userId,
@@ -352,9 +364,53 @@ export default function ChatPage() {
       <header className="chat-header">
         <h1>{assistantName}</h1>
         <span className="chat-domain">
-          context: <strong>{activeDomain}</strong>
+          context:{' '}
+          <strong>
+            {activeContextSlug
+              ? contexts.find((c) => c.slug === activeContextSlug)?.label ||
+                activeContextSlug
+              : 'all'}
+          </strong>
         </span>
       </header>
+
+      {contexts.length > 0 && (
+        <div className="chat-context-chips">
+          <button
+            type="button"
+            className={`chat-context-chip${
+              activeContextSlug === null ? ' is-active' : ''
+            }`}
+            onClick={() => setActiveContextSlug(null)}
+          >
+            All
+          </button>
+          {contexts.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`chat-context-chip${
+                activeContextSlug === c.slug ? ' is-active' : ''
+              }`}
+              onClick={() =>
+                setActiveContextSlug(
+                  activeContextSlug === c.slug ? null : c.slug
+                )
+              }
+              title={`/${c.slug}`}
+            >
+              {c.color && (
+                <span
+                  className="chat-context-dot"
+                  style={{ background: c.color }}
+                />
+              )}
+              {c.icon && <span>{c.icon}</span>}
+              <span>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="chat-list" ref={listRef}>
         {messages.length === 0 && !thinking && (
