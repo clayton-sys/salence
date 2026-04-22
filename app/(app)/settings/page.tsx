@@ -157,24 +157,25 @@ export default function SettingsPage() {
           it. Model routing is managed by the platform.
         </p>
         <div className="settings-tier">
-          <h3>Grunt tier</h3>
+          <h3>Haiku tier</h3>
           <p>
-            <code>{MODEL_CONFIG.grunt.provider}</code> ·{' '}
-            <code>{MODEL_CONFIG.grunt.model}</code>
+            <code>{MODEL_CONFIG.haiku.provider}</code> ·{' '}
+            <code>{MODEL_CONFIG.haiku.model}</code>
           </p>
           <p className="settings-muted">
-            Fast, cheap calls: classification, compression, fact extraction,
-            decay checks.
+            Fast, cheap calls: extraction, categorization, tagging, patches,
+            short summaries, quick replies.
           </p>
         </div>
         <div className="settings-tier">
-          <h3>Reason tier</h3>
+          <h3>Sonnet tier</h3>
           <p>
-            <code>{MODEL_CONFIG.reason.provider}</code> ·{' '}
-            <code>{MODEL_CONFIG.reason.model}</code>
+            <code>{MODEL_CONFIG.sonnet.provider}</code> ·{' '}
+            <code>{MODEL_CONFIG.sonnet.model}</code>
           </p>
           <p className="settings-muted">
-            Conversation, synthesis, weekly digests, agent runs.
+            Conversation, planning, artifact generation, nuanced composition,
+            agent runs.
           </p>
         </div>
       </section>

@@ -106,6 +106,11 @@ export async function runAgent(
       messages,
       tools,
       maxTokens: 4096,
+      logContext: {
+        supabase: ctx.supabase,
+        userId: ctx.userId,
+        agentId: agent.id,
+      },
     })
 
     // Record assistant blocks — text + card tool_use blocks are surfaced to UI.

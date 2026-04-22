@@ -32,9 +32,10 @@ export async function POST(req: Request) {
 
   try {
     const raw = await modelCall({
-      taskType: 'extract_facts',
-      systemPrompt: `Extract key personal facts from this message. Reply ONLY with a JSON array: [{fact: string, contentType: string, tags: string[]}]. Content types: fact | decision | question | health | family | work. Return [] if no clear facts. Keep facts concise and specific.`,
+      taskType: 'extract',
+      systemPrompt: `Extract key personal facts from this message. Reply ONLY with a JSON array: [{fact: string, contentType: string, tags: string[]}]. Content types: fact | decision | question | health | family | work | note. If the user's message starts with "remember that", "save this as a note", "note for X:", "note:", "jot down", or similar, treat the stated content as contentType "note". Return [] if no clear facts. Keep facts concise and specific.`,
       userMessage: body.message,
+      logContext: { supabase, userId: user.id, agentId: 'fact_extractor' },
     })
     const cleaned = raw.replace(/```json|```/g, '').trim()
     let facts: Array<{ fact: string; contentType?: ContentType; tags?: string[] }> = []

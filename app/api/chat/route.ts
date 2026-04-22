@@ -142,6 +142,7 @@ Never call send_email, create_calendar_event, delete_calendar_event, or delete_m
       messages,
       tools: CARD_TOOLS,
       maxTokens: 4096,
+      logContext: { supabase, userId: user.id, agentId: 'chat' },
     })
 
     // Return the raw content blocks so the client renderer can mount cards.
